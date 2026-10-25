@@ -386,13 +386,22 @@ final class TestRun: @unchecked Sendable {
     private func checkStateRestore() {
         let targets = writableParameters
         let unit = host.audioUnit
+        // Start from values this host set itself, and compare against those: an
+        // out-of-process AUv3's values reach the host's copy of its tree
+        // asynchronously, and right after render-thread automation that copy can lag,
+        // so reading it back here could blame the plugin for the host's stale copy.
+        restoreStartingValues()
+        if host.isAUv3 {
+            _ = render(seconds: 0.2)
+            usleep(300_000)
+        }
         guard let saved = unit.fullState else {
             checks.append(CheckResult(id: "state", title: "Saves and restores its state", status: .warning,
                                       detail: "fullState is empty, so a host project can't save the plugin's settings.",
                                       hint: "Return your settings from fullState (and accept them back) so projects reopen as they were saved."))
             return
         }
-        let before = Dictionary(uniqueKeysWithValues: targets.map { ($0.address, $0.value) })
+        let before = Dictionary(uniqueKeysWithValues: startingValues.map { ($0.0.address, $0.1) })
         for (i, parameter) in targets.enumerated() {
             parameter.setValue(Self.sweep(parameter, t: 0.71, lane: i + 3), originator: nil)
         }
