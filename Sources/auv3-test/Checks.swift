@@ -344,15 +344,29 @@ final class TestRun: @unchecked Sendable {
             _ = render(seconds: 0.2)
             usleep(200_000)
         }
+        let stepped = { (parameter: AUParameter) in parameter.unit == .indexed || parameter.unit == .boolean }
+        func tolerance(_ parameter: AUParameter) -> AUValue {
+            stepped(parameter) ? 0.5 : max(1e-3, (parameter.maxValue - parameter.minValue) * 1e-3)
+        }
+        var sets: [(AUParameter, AUValue)] = []
         var mismatches: [String] = []
         for (i, parameter) in targets.enumerated() {
             let value = Self.sweep(parameter, t: 0.37, lane: i)
             parameter.setValue(value, originator: nil)
-            let readBack = parameter.value
-            let stepped = parameter.unit == .indexed || parameter.unit == .boolean
-            let tolerance: AUValue = stepped ? 0.5 : max(1e-3, (parameter.maxValue - parameter.minValue) * 1e-3)
-            if abs(readBack - value) > tolerance {
-                mismatches.append("\(parameter.identifier): set \(Self.format(value)), read \(Self.format(readBack))")
+            sets.append((parameter, value))
+            if !host.isAUv3 {
+                let readBack = parameter.value
+                if abs(readBack - value) > tolerance(parameter) {
+                    mismatches.append("\(parameter.identifier): set \(Self.format(value)), read \(Self.format(readBack))")
+                }
+            }
+        }
+        // An out-of-process AUv3's values reach the host's copy of its parameter tree
+        // asynchronously, so give them a moment, as a host's UI would.
+        if host.isAUv3 {
+            usleep(300_000)
+            for (parameter, value) in sets where abs(parameter.value - value) > tolerance(parameter) {
+                mismatches.append("\(parameter.identifier): set \(Self.format(value)), read \(Self.format(parameter.value))")
             }
         }
         restoreStartingValues()
@@ -361,7 +375,9 @@ final class TestRun: @unchecked Sendable {
             status: mismatches.isEmpty ? .passed : .warning,
             detail: mismatches.isEmpty ? "All \(targets.count) writable parameters read back the value just set."
                                        : "\(mismatches.count) didn't: " + mismatches.prefix(5).joined(separator: "; ") + (mismatches.count > 5 ? "…" : "."),
-            hint: "Hosts (and auval) read a parameter straight back after setting it. If you apply sets later, return the pending value until then.",
+            hint: host.isAUv3
+                ? "Even 300 ms after the host set these, its copy of the parameter tree hadn't caught up, so a host's own controls would show the old value. It's common for out-of-process AUv3s straight after render-thread automation, and the plugin itself may well have the value; check its fullState. If you apply sets later, return the pending value from implementorValueProvider until then."
+                : "Hosts (and auval) read a parameter straight back after setting it. If you apply sets later, return the pending value until then.",
             measurements: ["mismatches": Double(mismatches.count)]))
     }
 

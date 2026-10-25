@@ -77,7 +77,7 @@ An AUv3 must be registered before macOS can see it: open its containing app once
 | `sound-after-automation` | still plays once automation stops | it's silent: automation left it stuck |
 | `host-thread-automation` | keeps time while parameters are set 50 times a second from another thread (a host's controls or control surface) | as for render-thread automation |
 | `clicks` | changes parameters without clicking: each smoothly variable parameter in turn jumps between a quarter and three quarters of its range while a chord holds, as stepped automation does | (a warning) a jump makes an edge in the waveform at least 4× sharper than anything the steady sound has at either value |
-| `parameter-readback` | reads back a parameter straight after it's set, as hosts and auval do | (a warning) a value doesn't read back |
+| `parameter-readback` | reads back a parameter after it's set: straight away for an AUv2, as hosts and auval do, or within 300 ms for an out-of-process AUv3, whose values reach the host asynchronously | (a warning) a value doesn't read back |
 | `state` | restores every parameter from a saved `fullState` after they've been scrambled | any parameter doesn't come back |
 
 Each failure or warning comes with a hint: the usual cause and fix.

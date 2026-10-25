@@ -54,7 +54,7 @@ This is the most common way to waste a session:
 |---|---|
 | `render-thread-automation` stalls, then `sound-after-automation` silent | The parameter observer does main-thread work on the render thread: SwiftUI `@Published` / `ObservableObject` updates, UI, locks the main thread holds, allocation. Collect host sets in a lock-free or briefly locked buffer and apply them on the main thread; read back the pending value meanwhile. |
 | `host-thread-automation` late | The same, from a host's other threads, or the main thread being kept busy by the change. |
-| `parameter-readback` | The value provider returns the applied value, not the one just set, while the set is still pending. |
+| `parameter-readback` | The value provider returns the applied value, not the one just set, while the set is still pending. For an out-of-process AUv3, the host's copy can also lag straight after render-thread automation while the plugin has the value: compare its `fullState` before changing code. |
 | `state` | `fullState`'s getter misses sets still waiting to be applied; the setter applies the patch but doesn't tell the parameter tree (an out-of-process host keeps its own copy of every value); or older pending sets land on top of the restored state. |
 | `clicks` | A gain or mix level is applied in one sample. Glide to the new value over 5-30 ms (a one-pole smoother or a ramp). A delay's time needs a crossfade instead. |
 | `plays` render errors | `kAudioUnitErr_NoConnection` for an effect usually means the input bus isn't enabled or connected; `TooManyFramesToProcess` means `maximumFramesToRender` isn't respected. |
