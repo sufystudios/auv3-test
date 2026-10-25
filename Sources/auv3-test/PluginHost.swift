@@ -181,7 +181,16 @@ final class PluginHost: @unchecked Sendable {
         /// Peak absolute sample, and whether any sample was NaN or infinite.
         var peak: Float
         var nonFinite: Bool
+        /// The block's sharpest edge: the largest second difference between samples,
+        /// carried across blocks. Steady for a steady sound; a click spikes it.
+        var edge: Float
     }
+
+    /// One per channel, so edges are measured across block boundaries.
+    private var edgeMeters: [EdgeMeter] = []
+
+    /// Where rendered audio goes as well, when the run is saving it.
+    var capture: AudioCapture?
 
     var blockDuration: Double { Double(options.blockSize) / options.sampleRate }
 
@@ -214,16 +223,25 @@ final class PluginHost: @unchecked Sendable {
 
         var peak: Float = 0
         var nonFinite = false
-        for buffer in UnsafeMutableAudioBufferListPointer(output.mutableAudioBufferList) {
+        var edge: Float = 0
+        let rendered = UnsafeMutableAudioBufferListPointer(output.mutableAudioBufferList)
+        if edgeMeters.count != rendered.count { edgeMeters = Array(repeating: EdgeMeter(), count: rendered.count) }
+        for (channel, buffer) in rendered.enumerated() {
             guard let data = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
             let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
             for i in 0..<count {
                 let x = data[i]
-                if !x.isFinite { nonFinite = true } else { peak = max(peak, abs(x)) }
+                if !x.isFinite {
+                    nonFinite = true
+                    continue
+                }
+                peak = max(peak, abs(x))
+                edge = max(edge, edgeMeters[channel].measure(x))
             }
         }
+        if status == noErr { capture?.append(output) }
         sampleTime += Double(frames)
-        return BlockResult(status: status, duration: duration, peak: peak, nonFinite: nonFinite)
+        return BlockResult(status: status, duration: duration, peak: peak, nonFinite: nonFinite, edge: edge)
     }
 
     /// An effect's input: a quiet 220 Hz tone with a little noise.

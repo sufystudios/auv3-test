@@ -41,6 +41,7 @@ case .run(let options):
             "secondsPerPhase": "\(options.seconds)",
             "realTime": options.realTime ? "yes" : "no (--fast)",
             "window": options.showUI ? "opened" : "not opened (--no-ui)",
+            "audio": options.saveAudio.map { "saved to \($0.path)" } ?? "not saved",
         ]
         let log: (String) -> Void = { message in
             if options.verbose { FileHandle.standardError.write(Data("… \(message)\n".utf8)) }
@@ -56,10 +57,17 @@ case .run(let options):
                 hasCustomView: host.component.hasCustomView,
                 parameterCount: host.audioUnit.parameterTree?.allParameters.count ?? 0)
             try host.prepare()
+            if let directory = options.saveAudio {
+                host.capture = try AudioCapture(directory: directory, format: host.format)
+            }
             let run = TestRun(host: host, options: options, log: log)
             run.capturePrepared()
             run.runAll()
             report.checks = run.checks
+            if let capture = host.capture {
+                report.audioFiles = capture.written.map(\.path)
+                if !capture.errors.isEmpty { report.settings["audioErrors"] = capture.errors.joined(separator: "; ") }
+            }
             if options.showUI { host.closeWindow() }
             host.stop()
         } catch {

@@ -34,6 +34,7 @@ final class TestRun: @unchecked Sendable {
         checkRenderThreadAutomation()
         checkSoundAfterAutomation()
         checkHostThreadAutomation()
+        checkClicks()
         checkParameterReadBack()
         checkStateRestore()
     }
@@ -51,16 +52,21 @@ final class TestRun: @unchecked Sendable {
         var worstSeconds: Double = 0
         var silentWindows = 0     // half-second windows with nothing audible
         var windows = 0
+        var edges: [Float] = []   // each block's sharpest edge (see BlockResult.edge)
     }
 
     /// Renders `seconds` of audio, in real time unless --fast. `perBlock` runs on the
     /// render thread before each block, with the block's index.
-    private func render(seconds: Double, perBlock: @escaping (Int) -> Void = { _ in }) -> PhaseStats {
+    /// With a `name`, the phase's audio is saved when the run is saving audio.
+    private func render(seconds: Double, name: String? = nil, perBlock: @escaping (Int) -> Void = { _ in }) -> PhaseStats {
         var stats = PhaseStats()
+        if let name { host.capture?.begin(name, seconds: seconds) }
+        defer { if name != nil { host.capture?.finish() } }
         let host = self.host
         let realTime = options.realTime
         let blockCount = Int((seconds / host.blockDuration).rounded(.up))
         let windowBlocks = max(1, Int(0.5 / host.blockDuration))
+        stats.edges.reserveCapacity(blockCount)
         let done = DispatchSemaphore(value: 0)
 
         let thread = Thread {
@@ -75,6 +81,7 @@ final class TestRun: @unchecked Sendable {
                 }
                 if result.nonFinite { stats.nonFiniteBlocks += 1 }
                 stats.peak = max(stats.peak, result.peak)
+                stats.edges.append(result.edge)
                 windowPeak = max(windowPeak, result.peak)
                 // The first few calls of a phase may warm caches; hosts tolerate that too.
                 if index >= 8 {
@@ -190,7 +197,7 @@ final class TestRun: @unchecked Sendable {
     private func checkPlaysSound() {
         log("Playing \(host.isInstrument ? "a chord" : "a test tone through it") for \(options.seconds) s")
         startNotes()
-        let stats = render(seconds: options.seconds)
+        let stats = render(seconds: options.seconds, name: "plays")
         playedSoundAtStart = stats.peak >= 1e-4
         var check = timingCheck(id: "plays", title: host.isInstrument ? "Plays a held chord" : "Processes a test tone", stats: stats)
         if !playedSoundAtStart && check.status != .failed {
@@ -216,7 +223,7 @@ final class TestRun: @unchecked Sendable {
         log("Automating \(targets.count) parameters from the render thread for \(options.seconds) s")
         let blocksPerSecond = 1 / host.blockDuration
         let host = self.host
-        let stats = render(seconds: options.seconds) { index in
+        let stats = render(seconds: options.seconds, name: "render-thread-automation") { index in
             let t = Double(index) / blocksPerSecond
             for (i, parameter) in targets.enumerated() {
                 host.automate(parameter.address, to: Self.sweep(parameter, t: t, lane: i))
@@ -234,7 +241,7 @@ final class TestRun: @unchecked Sendable {
         restoreStartingValues()
         stopNotes()
         startNotes()
-        let stats = render(seconds: min(options.seconds, 2))
+        let stats = render(seconds: min(options.seconds, 2), name: "sound-after-automation")
         let sounded = stats.peak >= 1e-4
         checks.append(CheckResult(
             id: "sound-after-automation", title: "Still plays after automation",
@@ -268,13 +275,63 @@ final class TestRun: @unchecked Sendable {
             }
         }
         worker.start()
-        let stats = render(seconds: min(options.seconds, 2))
+        let stats = render(seconds: min(options.seconds, 2), name: "host-thread-automation")
         keepGoing.clear()
         checks.append(timingCheck(
             id: "host-thread-automation", title: "Keeps time while the host sets parameters from another thread",
             stats: stats, extraDetail: " Set \(targets.count) parameters 50 times a second from \(fromMainThread ? "the main thread (AUv2)" : "a background thread")."))
         restoreStartingValues()
         stopNotes()
+    }
+
+    /// Stepped automation - a host jumping a parameter from one value to another, as
+    /// Logic does between automation points or when you click a control - shouldn't
+    /// click. Each smoothly variable parameter in turn jumps between a quarter and three
+    /// quarters of its range while a chord holds; the blocks just after each jump are
+    /// compared with the steady sound at both values. A plugin that glides to a new
+    /// value shows no spike; one that applies it in a single sample pops.
+    private func checkClicks() {
+        guard host.isInstrument || host.isEffect, playedSoundAtStart || host.isEffect else { return }
+        let targets = writableParameters.filter { $0.unit != .indexed && $0.unit != .boolean }
+        guard !targets.isEmpty else { return }
+        let hold = 0.12
+        let holdBlocks = max(8, Int((hold / host.blockDuration).rounded()))
+        // A jump may land a block or two late (plugins applying sets on their main
+        // thread), and a glide or ring-out takes a few more: the transition is the
+        // first third of a hold, the steady part the rest.
+        let transitionBlocks = max(3, holdBlocks / 3)
+        log("Jumping \(targets.count) parameters, one at a time, to listen for clicks (\(String(format: "%.0f", Double(targets.count) * 3 * hold)) s)")
+        startNotes()
+        let host = self.host
+        var findings: [(name: String, ratio: Float)] = []
+        if let capture = host.capture { capture.begin("clicks", seconds: Double(targets.count) * 3 * hold + 1) }
+        for parameter in targets {
+            let span = parameter.maxValue - parameter.minValue
+            let low = parameter.minValue + span * 0.25
+            let high = parameter.minValue + span * 0.75
+            // Settle at the low value, jump up, then back down.
+            let stats = render(seconds: Double(holdBlocks * 3) * host.blockDuration) { index in
+                if index == 0 { host.automate(parameter.address, to: low) }
+                if index == holdBlocks { host.automate(parameter.address, to: high) }
+                if index == 2 * holdBlocks { host.automate(parameter.address, to: low) }
+            }
+            if let ratio = ClickDetection.clickRatio(edges: stats.edges, holdBlocks: holdBlocks, transitionBlocks: transitionBlocks) {
+                findings.append((parameter.identifier, ratio))
+            }
+        }
+        host.capture?.finish()
+        restoreStartingValues()
+        stopNotes()
+        findings.sort { $0.ratio > $1.ratio }
+        let list = findings.prefix(6).map { "\($0.name) (\(String(format: "%.0f", $0.ratio))× sharper)" }.joined(separator: ", ")
+        checks.append(CheckResult(
+            id: "clicks", title: "Changes parameters without clicks",
+            status: findings.isEmpty ? .passed : .warning,
+            detail: findings.isEmpty
+                ? "Jumped \(targets.count) parameters between a quarter and three quarters of their range; none clicked."
+                : "\(findings.count) of \(targets.count) clicked when jumped: \(list)\(findings.count > 6 ? "…" : ".")",
+            hint: "Glide to a new value over a few milliseconds (a one-pole smoother or a short ramp, 5-30 ms) instead of applying it in one sample. Gains and mix levels are the usual culprits; a delay's time often needs a crossfade instead.",
+            measurements: ["parametersTested": Double(targets.count), "clicking": Double(findings.count)]))
     }
 
     /// A host reads a parameter back straight after setting it (auval does too).

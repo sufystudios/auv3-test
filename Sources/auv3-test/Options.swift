@@ -15,6 +15,8 @@ struct Options {
     var realTime = true
     var json = false
     var verbose = false
+    /// Where to save each phase's audio as WAV, if anywhere.
+    var saveAudio: URL?
 
     static let usage = """
     auv3-test: tests an Audio Unit v3 plugin the way a host does.
@@ -35,6 +37,7 @@ struct Options {
       --block-size <n>     Frames per render call (default 512).
       --no-ui              Don't open the plugin's window (for headless machines).
       --fast               Render as fast as possible instead of in real time.
+      --save-audio <dir>   Save each phase's audio there as a WAV file, to listen to.
       --verbose            Print progress while testing.
       --help
 
@@ -65,6 +68,9 @@ struct Options {
             case "--no-ui": options.showUI = false
             case "--fast": options.realTime = false
             case "--verbose", "-v": options.verbose = true
+            case "--save-audio":
+                guard let v = value(), !v.hasPrefix("--") else { return .error("--save-audio needs a folder") }
+                options.saveAudio = URL(fileURLWithPath: (v as NSString).expandingTildeInPath)
             case "--seconds":
                 guard let v = value().flatMap(Double.init), v > 0 else { return .error("--seconds needs a positive number") }
                 options.seconds = v

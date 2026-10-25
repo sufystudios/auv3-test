@@ -25,7 +25,7 @@ This is the most common way to waste a session:
 ```json
 {
   "tool": "auv3-test",
-  "toolVersion": "0.1.0",
+  "toolVersion": "0.2.0",
   "plugin": { "name": "…", "manufacturer": "…", "codes": "aumu Dron Sufy", "version": "1.6.0",
               "isAUv3": true, "hasCustomView": true, "parameterCount": 81 },
   "settings": { "sampleRate": "48000 Hz", "blockSize": "512 frames", "…": "…" },
@@ -44,7 +44,7 @@ This is the most common way to waste a session:
 ```
 
 - `setupError` is set (exit code 2) when the plugin couldn't be found or loaded; `checks` is empty then.
-- `id` values are stable: `parameters`, `window`, `plays`, `render-thread-automation`, `sound-after-automation`, `host-thread-automation`, `parameter-readback`, `state`. Match on them, not on titles.
+- `id` values are stable: `parameters`, `window`, `plays`, `render-thread-automation`, `sound-after-automation`, `host-thread-automation`, `clicks`, `parameter-readback`, `state`. Match on them, not on titles.
 - `hint` is present on every check but only means something when the check didn't pass.
 - `measurements` is for comparing runs. `worstRenderMs` against `blockMs` tells you how close the plugin is to dropping out.
 
@@ -56,7 +56,14 @@ This is the most common way to waste a session:
 | `host-thread-automation` late | The same, from a host's other threads, or the main thread being kept busy by the change. |
 | `parameter-readback` | The value provider returns the applied value, not the one just set, while the set is still pending. |
 | `state` | `fullState`'s getter misses sets still waiting to be applied; the setter applies the patch but doesn't tell the parameter tree (an out-of-process host keeps its own copy of every value); or older pending sets land on top of the restored state. |
+| `clicks` | A gain or mix level is applied in one sample. Glide to the new value over 5-30 ms (a one-pole smoother or a ramp). A delay's time needs a crossfade instead. |
 | `plays` render errors | `kAudioUnitErr_NoConnection` for an effect usually means the input bus isn't enabled or connected; `TooManyFramesToProcess` means `maximumFramesToRender` isn't respected. |
+
+## Listening
+
+Run with `--save-audio <dir>` to get each phase as a 32-bit float WAV (`01-plays.wav`, `05-clicks.wav`…), and `audioFiles` in the JSON lists them. If you can analyse audio, use them to confirm a fix. If you can't, tell the user which file to listen to. The clicks recording runs through each parameter in turn, 0.36 s apiece, in the order of the parameter tree.
+
+Zipper noise (stepped, crackly automation) isn't detected yet; listen for it in `02-render-thread-automation.wav`.
 
 ## Don't
 

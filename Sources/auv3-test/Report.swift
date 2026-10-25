@@ -35,6 +35,8 @@ struct Report: Codable {
     var plugin: PluginInfo?
     var settings: [String: String] = [:]
     var checks: [CheckResult] = []
+    /// Each phase's audio, when saved with --save-audio.
+    var audioFiles: [String]?
     /// Set when the plugin couldn't be found or loaded at all.
     var setupError: String?
 
@@ -63,6 +65,11 @@ struct Report: Codable {
             print("    \(check.detail)")
             if let hint = check.hint, check.status != .passed { print("    → \(hint)") }
         }
+        if let audioFiles, !audioFiles.isEmpty {
+            print("")
+            print("Audio saved:")
+            for file in audioFiles { print("    \(file)") }
+        }
         let failed = checks.filter { $0.status == .failed }.count
         let warnings = checks.filter { $0.status == .warning }.count
         print("")
@@ -79,4 +86,4 @@ struct Report: Codable {
     }
 }
 
-let auv3TestVersion = "0.1.0"
+let auv3TestVersion = "0.2.0"

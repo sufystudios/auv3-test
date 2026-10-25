@@ -10,6 +10,7 @@ let package = Package(
     targets: [
         // Apple frameworks only (AVFoundation, AudioToolbox, AppKit): nothing to install.
         .executableTarget(name: "auv3-test", path: "Sources/auv3-test"),
+        .testTarget(name: "auv3-testTests", dependencies: ["auv3-test"], path: "Tests/auv3-testTests"),
     ],
     swiftLanguageModes: [.v5]
 )

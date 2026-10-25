@@ -4,7 +4,7 @@ A command-line host that tests an Audio Unit v3 plugin on macOS **the way Logic 
 
 ```
 $ auv3-test aumu Dron Sufy
-auv3-test 0.1.0
+auv3-test 0.2.0
 Plugin:  DroneSynth by Sufy Studios  [aumu Dron Sufy]  version 1.6.0
          AUv3, 81 parameters, has its own window
 
@@ -59,6 +59,7 @@ auv3-test aumu "dls " appl --json   # codes with spaces need quotes
 | `--block-size <n>` | Frames per render call (default 512). |
 | `--no-ui` | Don't open the plugin's window (headless machines, CI). |
 | `--fast` | Render as fast as possible instead of in real time. Quicker, but timing checks mean less. |
+| `--save-audio <dir>` | Save each phase's audio there as a WAV file, to listen to what the checks measured. |
 | `--verbose` | Print progress to stderr. |
 
 **Exit codes:** `0` every check passed (there may be warnings), `1` at least one check failed, `2` the plugin couldn't be found or loaded, or the options were wrong.
@@ -75,12 +76,23 @@ An AUv3 must be registered before macOS can see it: open its containing app once
 | `render-thread-automation` | keeps time while every parameter is automated on every block from the render thread, as a DAW plays back automation | any render call over 100 ms, more than 2% of calls late, or any call taking twice its block |
 | `sound-after-automation` | still plays once automation stops | it's silent: automation left it stuck |
 | `host-thread-automation` | keeps time while parameters are set 50 times a second from another thread (a host's controls or control surface) | as for render-thread automation |
+| `clicks` | changes parameters without clicking: each smoothly variable parameter in turn jumps between a quarter and three quarters of its range while a chord holds, as stepped automation does | (a warning) a jump makes an edge in the waveform at least 4× sharper than anything the steady sound has at either value |
 | `parameter-readback` | reads back a parameter straight after it's set, as hosts and auval do | (a warning) a value doesn't read back |
 | `state` | restores every parameter from a saved `fullState` after they've been scrambled | any parameter doesn't come back |
 
 Each failure or warning comes with a hint: the usual cause and fix.
 
+**What the sound checks don't hear.** They catch silence, NaN and infinite samples, extreme levels and clicks (a sudden step in the waveform, like a gain applied in one sample). They don't yet catch *zipper noise*: a parameter moving in small audible steps as automation updates it. A filter cutoff jumping to a new value changes how bright the sound is without a step in the waveform, so it doesn't count as a click. Use `--save-audio` and listen when you're chasing that.
+
 Rendering happens on a dedicated `.userInteractive` thread, paced in real time, calling the plugin's `renderBlock` directly as a host's audio thread does. The host supplies a 120 BPM 4/4 `musicalContextBlock` and a playing `transportStateBlock`, and schedules MIDI and automation from the render thread with `scheduleMIDIEventBlock` and `scheduleParameterBlock`. The plugin's window stays open throughout, because many render-thread bugs only appear while the UI is alive.
+
+## Development
+
+```sh
+swift test --scratch-path /tmp/auv3-test-build
+```
+
+The tests check the click detector on made-up signals where the right answer is known. Pass a `--scratch-path` outside `~/Documents` if that folder syncs to iCloud: the extended attributes iCloud adds make code signing the test bundle fail.
 
 ## For coding agents
 
