@@ -60,6 +60,8 @@ auv3-test aumu "dls " appl --json   # codes with spaces need quotes
 | `--no-ui` | Don't open the plugin's window (headless machines, CI). |
 | `--fast` | Render as fast as possible instead of in real time. Quicker, but timing checks mean less. |
 | `--save-audio <dir>` | Save each phase's audio there as a WAV file, to listen to what the checks measured. |
+| `--snapshot <png>` | After the checks, save a PNG of the plugin's window, its own drawing included (for store screenshots or docs). The window is raised above other apps for the shot, so keep it unobscured. May need the Screen Recording permission for the terminal. Not with `--no-ui`. |
+| `--window-size <WxH>` | Open the plugin's window at this content size in points (e.g. `1400x460`), instead of the size the plugin asks for. Many plugins pick their layout from the size. |
 | `--verbose` | Print progress to stderr. |
 
 **Exit codes:** `0` every check passed (there may be warnings), `1` at least one check failed, `2` the plugin couldn't be found or loaded, or the options were wrong.

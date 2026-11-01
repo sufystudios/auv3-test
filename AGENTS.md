@@ -63,6 +63,8 @@ This is the most common way to waste a session:
 
 Run with `--save-audio <dir>` to get each phase as a 32-bit float WAV (`01-plays.wav`, `05-clicks.wav`…), and `audioFiles` in the JSON lists them. If you can analyse audio, use them to confirm a fix. If you can't, tell the user which file to listen to. The clicks recording runs through each parameter in turn, 0.36 s apiece, in the order of the parameter tree.
 
+Run with `--snapshot <file.png>` (and optionally `--window-size <WxH>`) to save an image of the plugin's window after the checks. An AUv3's view is drawn by the plugin's own process, so auv3-test captures that part of the screen with its window raised to the front; `settings.snapshot` in the JSON says where it went, or why it wasn't saved. Look at the image before using it: if the macOS has an older copy of the plugin registered, that's the one shown.
+
 Zipper noise (stepped, crackly automation) isn't detected yet; listen for it in `02-render-thread-automation.wav`.
 
 ## Don't

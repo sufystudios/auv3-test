@@ -146,7 +146,7 @@ final class PluginHost: @unchecked Sendable {
                         note = "the plugin offered no view"
                         return
                     }
-                    var size = controller.preferredContentSize
+                    var size = self.options.windowSize ?? controller.preferredContentSize
                     if size.width < 50 || size.height < 50 { size = NSSize(width: 800, height: 500) }
                     let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                                           styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -162,6 +162,50 @@ final class PluginHost: @unchecked Sendable {
             }
         }
         if done.wait(timeout: .now() + 15) == .timedOut { return "the plugin's view didn't arrive within 15 seconds" }
+        return note
+    }
+
+    /// Saves the plugin's window as a PNG at the screen's resolution. An AUv3's view is
+    /// drawn by the plugin's own process, in a layer of its own over our window, so the
+    /// image is of that part of the screen, taken from the window server: our window
+    /// alone comes out empty. (Capturing other processes' drawing may need the Screen
+    /// Recording permission for the terminal running auv3-test.) Returns a note if it
+    /// couldn't be saved.
+    func snapshot(to url: URL) -> String? {
+        var note: String?
+        // What's on screen is what's captured, so lift the window above every other
+        // app's first, and give the window server a moment to composite it.
+        DispatchQueue.main.sync {
+            self.window?.level = .floating
+            self.window?.orderFrontRegardless()
+        }
+        Thread.sleep(forTimeInterval: 1)
+        DispatchQueue.main.sync {
+            guard let window = self.window, let screen = window.screen ?? NSScreen.screens.first else {
+                note = "no window was open to snapshot"
+                return
+            }
+            window.displayIfNeeded()
+            // The window's frame in the window server's coordinates, which run down
+            // from the top of the main screen rather than up from the bottom.
+            let mainHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+            let frame = window.frame
+            let area = CGRect(x: frame.minX, y: mainHeight - frame.maxY, width: frame.width, height: frame.height)
+            guard let image = CGWindowListCreateImage(area, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]) else {
+                note = "the window server returned no image of the window"
+                return
+            }
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            guard let png = bitmap.representation(using: .png, properties: [:]) else {
+                note = "couldn't encode the snapshot as PNG"
+                return
+            }
+            do {
+                try png.write(to: url)
+            } catch {
+                note = "couldn't write the snapshot: \(error.localizedDescription)"
+            }
+        }
         return note
     }
 

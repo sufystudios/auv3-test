@@ -17,6 +17,10 @@ struct Options {
     var verbose = false
     /// Where to save each phase's audio as WAV, if anywhere.
     var saveAudio: URL?
+    /// Where to save a PNG of the plugin's window after the tests, if anywhere.
+    var snapshot: URL?
+    /// The plugin window's content size, instead of the size the plugin asks for.
+    var windowSize: CGSize?
 
     static let usage = """
     auv3-test: tests an Audio Unit v3 plugin the way a host does.
@@ -38,6 +42,9 @@ struct Options {
       --no-ui              Don't open the plugin's window (for headless machines).
       --fast               Render as fast as possible instead of in real time.
       --save-audio <dir>   Save each phase's audio there as a WAV file, to listen to.
+      --snapshot <png>     Save the plugin's window as a PNG after the tests (for store
+                           screenshots or docs). Needs the window, so not with --no-ui.
+      --window-size <WxH>  Open the plugin's window at this content size, in points.
       --verbose            Print progress while testing.
       --help
 
@@ -71,6 +78,15 @@ struct Options {
             case "--save-audio":
                 guard let v = value(), !v.hasPrefix("--") else { return .error("--save-audio needs a folder") }
                 options.saveAudio = URL(fileURLWithPath: (v as NSString).expandingTildeInPath)
+            case "--snapshot":
+                guard let v = value(), !v.hasPrefix("--") else { return .error("--snapshot needs a file name") }
+                options.snapshot = URL(fileURLWithPath: (v as NSString).expandingTildeInPath)
+            case "--window-size":
+                let parts = value()?.lowercased().split(separator: "x").compactMap { Double($0) } ?? []
+                guard parts.count == 2, parts.allSatisfy({ $0 >= 50 }) else {
+                    return .error("--window-size needs a size like 1400x500")
+                }
+                options.windowSize = CGSize(width: parts[0], height: parts[1])
             case "--seconds":
                 guard let v = value().flatMap(Double.init), v > 0 else { return .error("--seconds needs a positive number") }
                 options.seconds = v

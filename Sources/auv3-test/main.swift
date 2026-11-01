@@ -68,6 +68,13 @@ case .run(let options):
                 report.audioFiles = capture.written.map(\.path)
                 if !capture.errors.isEmpty { report.settings["audioErrors"] = capture.errors.joined(separator: "; ") }
             }
+            if let snapshot = options.snapshot {
+                if let problem = options.showUI ? host.snapshot(to: snapshot) : "--snapshot needs the window (not --no-ui)" {
+                    report.settings["snapshot"] = "not saved: \(problem)"
+                } else {
+                    report.settings["snapshot"] = "saved to \(snapshot.path)"
+                }
+            }
             if options.showUI { host.closeWindow() }
             host.stop()
         } catch {
