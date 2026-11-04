@@ -29,7 +29,7 @@ struct PluginInfo: Codable {
     var parameterCount: Int
 }
 
-struct Report: Codable {
+public struct Report: Codable {
     var tool = "auv3-test"
     var toolVersion = auv3TestVersion
     var plugin: PluginInfo?
@@ -40,12 +40,15 @@ struct Report: Codable {
     /// Set when the plugin couldn't be found or loaded at all.
     var setupError: String?
 
-    var exitCode: Int32 {
+    public var exitCode: Int32 {
         if setupError != nil { return 2 }
         return checks.contains { $0.status == .failed } ? 1 : 0
     }
 
-    func printText() {
+    /// The report as text, as the command line prints it.
+    public var text: String {
+        var lines: [String] = []
+        func print(_ line: String) { lines.append(line) }
         print("auv3-test \(toolVersion)")
         if let plugin {
             print("Plugin:  \(plugin.name) by \(plugin.manufacturer)  [\(plugin.codes)]  version \(plugin.version)")
@@ -57,7 +60,7 @@ struct Report: Codable {
         print("")
         if let setupError {
             print("✗ Couldn't test the plugin: \(setupError)")
-            return
+            return lines.joined(separator: "\n")
         }
         for check in checks {
             let mark = switch check.status { case .passed: "✓"; case .warning: "!"; case .failed: "✗" }
@@ -75,15 +78,19 @@ struct Report: Codable {
         print("")
         print(failed == 0 ? "PASSED  (\(checks.count) checks, \(warnings) warnings)"
                           : "FAILED  (\(failed) of \(checks.count) checks failed, \(warnings) warnings)")
+        return lines.joined(separator: "\n")
     }
 
-    func printJSON() {
+    /// The report as JSON, for scripts and agents.
+    public var json: String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        if let data = try? encoder.encode(self), let text = String(data: data, encoding: .utf8) {
-            print(text)
-        }
+        guard let data = try? encoder.encode(self), let text = String(data: data, encoding: .utf8) else { return "{}" }
+        return text
     }
+
+    func printText() { Swift.print(text) }
+    func printJSON() { Swift.print(json) }
 }
 
-let auv3TestVersion = "0.2.0"
+let auv3TestVersion = "0.3.0"

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import auv3_test
+@testable import AUv3TestKit
 
 /// The click check, on made-up signals where the right answer is known: three holds
 /// of 12 blocks, jumping something at the start of the second and third, as the

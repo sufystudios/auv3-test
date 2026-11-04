@@ -1,7 +1,11 @@
 import AVFoundation
 import AudioToolbox
-import AppKit
 import CoreAudioKit  // requestViewController
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 enum HostError: Error, CustomStringConvertible {
     case notFound(String)
@@ -16,7 +20,7 @@ enum HostError: Error, CustomStringConvertible {
     }
 }
 
-/// Every Audio Unit macOS can see, as a host's plugin list would show them.
+/// Every Audio Unit this device can see, as a host's plugin list would show them.
 func installedComponents() -> [AVAudioUnitComponent] {
     AVAudioUnitComponentManager.shared().components(matching: AudioComponentDescription())
         .sorted { ($0.manufacturerName, $0.name) < ($1.manufacturerName, $1.name) }
@@ -35,7 +39,12 @@ final class PluginHost: @unchecked Sendable {
     /// An app-extension AUv3, loaded in its own process; otherwise an AUv2 in ours.
     let isAUv3: Bool
 
+    #if os(macOS)
     private(set) var window: NSWindow?
+    #else
+    /// The plugin's view controller, kept while the tests run, as a host showing it would.
+    private var viewController: UIViewController?
+    #endif
     private var output: AVAudioPCMBuffer
     private var input: AVAudioPCMBuffer
     private var sampleTime: Double = 0
@@ -47,7 +56,7 @@ final class PluginHost: @unchecked Sendable {
     init(options: Options) throws {
         self.options = options
         guard let component = AVAudioUnitComponentManager.shared().components(matching: options.component).first else {
-            throw HostError.notFound("macOS has no Audio Unit with the codes \(describe(options.component)). Run `auv3-test --list` to see what's installed. For an AUv3, open its app once so macOS registers it.")
+            throw HostError.notFound("This device has no Audio Unit with the codes \(describe(options.component)). Run `auv3-test --list` to see what's installed. For an AUv3, open its app once so the system registers it.")
         }
         self.component = component
         let type = options.component.componentType
@@ -133,6 +142,7 @@ final class PluginHost: @unchecked Sendable {
 
     // MARK: The plugin's window
 
+    #if os(macOS)
     /// Opens the plugin's own view in a window, as a host does when you open it.
     /// Returns a note if it has none or it couldn't be shown.
     func openWindow() -> String? {
@@ -215,6 +225,38 @@ final class PluginHost: @unchecked Sendable {
             self.window = nil
         }
     }
+    #else
+    /// Asks for the plugin's view, as GarageBand does when you open a plugin, and loads
+    /// it. There's no window to put it in from a test runner, but the view controller
+    /// arriving, and its view loading, is what a host needs. Returns a note if it didn't.
+    func openWindow() -> String? {
+        var note: String?
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            self.audioUnit.requestViewController { controller in
+                DispatchQueue.main.async {
+                    defer { done.signal() }
+                    guard let controller else {
+                        note = "the plugin offered no view"
+                        return
+                    }
+                    controller.loadViewIfNeeded()
+                    self.viewController = controller
+                }
+            }
+        }
+        if done.wait(timeout: .now() + 15) == .timedOut { return "the plugin's view didn't arrive within 15 seconds" }
+        return note
+    }
+
+    func snapshot(to url: URL) -> String? {
+        "snapshots need the Mac (auv3-test opens a window there)"
+    }
+
+    func closeWindow() {
+        DispatchQueue.main.sync { self.viewController = nil }
+    }
+    #endif
 
     // MARK: Rendering
 

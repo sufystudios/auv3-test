@@ -1,10 +1,10 @@
 # auv3-test
 
-A command-line host that tests an Audio Unit v3 plugin on macOS **the way Logic Pro and GarageBand load it**: out of process, rendering on a real-time audio thread, with a host tempo and transport, MIDI, automation and the plugin's own window open. It reports what went wrong in plain words, with the usual cause and fix, or as JSON for scripts and coding agents.
+A command-line host that tests an Audio Unit v3 plugin on macOS (and on an iPhone, iPad or iOS Simulator) **the way Logic Pro and GarageBand load it**: out of process, rendering on a real-time audio thread, with a host tempo and transport, MIDI, automation and the plugin's own window open. It reports what went wrong in plain words, with the usual cause and fix, or as JSON for scripts and coding agents.
 
 ```
 $ auv3-test aumu Dron Sufy
-auv3-test 0.2.0
+auv3-test 0.3.0
 Plugin:  DroneSynth by Sufy Studios  [aumu Dron Sufy]  version 1.6.0
          AUv3, 81 parameters, has its own window
 
@@ -67,6 +67,22 @@ auv3-test aumu "dls " appl --json   # codes with spaces need quotes
 **Exit codes:** `0` every check passed (there may be warnings), `1` at least one check failed, `2` the plugin couldn't be found or loaded, or the options were wrong.
 
 An AUv3 must be registered before macOS can see it: open its containing app once. If you have two copies of the app (an App Store one and a debug build, say), macOS may load either; keep one, and run `killall -9 AudioComponentRegistrar` after replacing it.
+
+## On an iPhone, iPad or iOS Simulator
+
+`auv3-test-ios` runs the same checks on iOS, against a plugin installed there, and prints the report on your Mac. It builds a small runner app (`iOSRunner/AUv3TestRunner.swiftpm`), installs it, launches it with your arguments and collects the report.
+
+```sh
+./auv3-test-ios --devices                                  # connected devices and simulators
+./auv3-test-ios "iPhone 17 Pro" --list                     # plugins installed in that simulator
+./auv3-test-ios "iPhone 17 Pro" aumu Dron Sufy             # test in a simulator
+DEVELOPMENT_TEAM=ABCDE12345 ./auv3-test-ios "My iPad" aumu Dron Sufy --json   # on a device
+```
+
+- The options are the same as on the Mac, except `--snapshot` and `--window-size`. The exit codes are too, plus `3` if the runner couldn't be built, installed or launched.
+- A real device needs your Apple developer team ID to sign the runner (`DEVELOPMENT_TEAM`), and must be unlocked, trusted and in Developer Mode.
+- Install the plugin's app on the device or simulator, and open it once so iOS registers its Audio Unit.
+- The runner declares background audio, which iOS requires before it shows a host third-party Audio Units. Run with no arguments (from Xcode, say), it lists the plugins it can see.
 
 ## The checks
 

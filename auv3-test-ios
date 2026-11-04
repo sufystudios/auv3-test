@@ -1,0 +1,82 @@
+#!/bin/zsh
+# auv3-test-ios: runs auv3-test's checks on an iPhone or iPad (or an iOS Simulator),
+# against an AUv3 installed there, and prints the report here.
+#
+#   ./auv3-test-ios <device> <type> <subtype> <manufacturer> [options]
+#   ./auv3-test-ios <device> --list
+#   ./auv3-test-ios --devices
+#
+# <device> is a connected device's or a simulator's name (as `--devices` lists them) or
+# its identifier. The options are the Mac command line's (`auv3-test --help`); --snapshot
+# and --window-size are Mac-only.
+#
+# It builds the runner app (iOSRunner/AUv3TestRunner.swiftpm), installs it, launches it
+# with your arguments and waits for its report. A real device must be unlocked, and needs
+# your Apple developer team for signing: set DEVELOPMENT_TEAM (e.g. in your shell profile),
+# or pass it as DEVELOPMENT_TEAM=ABCDE12345 ./auv3-test-ios … The plugin's app must be
+# installed on the device, and opened once so iOS registers its Audio Unit.
+#
+# Exit status: 0 if every check passed, 1 if one failed, 2 if the plugin couldn't be
+# tested, 3 if the runner couldn't be built, installed or launched.
+set -uo pipefail
+here=${0:A:h}
+project="$here/iOSRunner/AUv3TestRunner.swiftpm"
+build="${AUV3_TEST_IOS_BUILD:-/tmp/auv3-test-ios-build}"
+bundle="${AUV3_RUNNER_BUNDLE_ID:-io.github.sufystudios.auv3-test-runner}"
+
+fail() { print -u2 "auv3-test-ios: $*"; exit 3; }
+
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+fi
+
+if [[ "$1" == "--devices" ]]; then
+    print "Connected iPhones and iPads:"
+    xcrun devicectl list devices 2>/dev/null | awk 'NR > 2 && $0 ~ /physical/'
+    print "\nSimulators:"
+    xcrun simctl list devices available | grep -E '^\s+(iPhone|iPad)'
+    exit 0
+fi
+
+device=$1
+shift
+[[ $# -gt 0 ]] || fail "say what to test: the plugin's codes (or --list) after the device"
+
+# A simulator, by name or UDID?
+sim=$(xcrun simctl list devices available | grep -E "^\s+$device \(|\($device\)" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+if [[ -n "$sim" ]]; then
+    print -u2 "… Building the runner for the simulator"
+    (cd "$project" && xcodebuild -scheme AUv3TestRunner -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath "$build" build -quiet) >&2 || fail "the runner didn't build"
+    app="$build/Build/Products/Debug-iphonesimulator/AUv3TestRunner.app"
+    xcrun simctl boot "$sim" 2>/dev/null
+    xcrun simctl bootstatus "$sim" -b >/dev/null || fail "the simulator didn't start"
+    xcrun simctl install "$sim" "$app" || fail "couldn't install the runner in the simulator"
+    print -u2 "… Testing (a minute or so)"
+    output=$(xcrun simctl launch --console-pty --terminate-running-process "$sim" "$bundle" "$@" 2>&1)
+else
+    # A connected device, by name or identifier.
+    udid=$(xcrun devicectl list devices 2>/dev/null | awk -v d="$device" 'NR > 2 && /physical/ && (index($0, d" ") == 1 || index($0, d))' \
+        | grep -oE '[0-9A-F]{8}-[0-9A-F]{16}|[0-9A-F-]{36}' | head -1)
+    [[ -n "$udid" ]] || fail "no simulator or connected device called \"$device\" (try --devices)"
+    [[ -n "${DEVELOPMENT_TEAM:-}" ]] || fail "set DEVELOPMENT_TEAM to your Apple developer team ID, to sign the runner for the device"
+    print -u2 "… Building the runner for $device"
+    (cd "$project" && DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM xcodebuild -scheme AUv3TestRunner -destination "id=$udid" \
+        -derivedDataPath "$build" -allowProvisioningUpdates DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM build -quiet) >&2 \
+        || fail "the runner didn't build or sign (is the device trusted, and DEVELOPMENT_TEAM right?)"
+    app="$build/Build/Products/Debug-iphoneos/AUv3TestRunner.app"
+    xcrun devicectl device install app --device "$udid" "$app" >/dev/null 2>&1 || fail "couldn't install the runner on $device"
+    print -u2 "… Testing on $device (a minute or so; keep it unlocked)"
+    output=$(xcrun devicectl device process launch --device "$udid" --console --terminate-existing "$bundle" "$@" 2>&1)
+    if [[ "$output" == *"could not be, unlocked"* ]]; then
+        fail "$device is locked: unlock it and try again"
+    fi
+fi
+
+# The report sits between the runner's markers; everything else is the system's noise.
+report=$(print -r -- "$output" | sed -n '/=== auv3-test report ===/,/=== end of report ===/p' | sed '1d;$d')
+[[ -n "$report" ]] || { print -u2 -r -- "$output"; fail "the runner didn't report (output above)"; }
+print -r -- "$report"
+code=$(print -r -- "$output" | sed -n 's/.*auv3-test exit code: \([0-9]*\).*/\1/p' | tail -1)
+exit ${code:-3}

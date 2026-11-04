@@ -185,12 +185,18 @@ final class TestRun: @unchecked Sendable {
             measurements: ["parameters": Double(all.count), "writable": Double(writableParameters.count)]))
     }
 
+    #if os(macOS)
+    static let windowOpenedDetail = "The plugin's view opened in a window, and stayed open through the tests that follow."
+    #else
+    static let windowOpenedDetail = "The plugin handed over its view, which loaded and stayed alive through the tests that follow."
+    #endif
+
     private func checkWindow() {
         log("Opening the plugin's window")
         let note = host.openWindow()
         checks.append(CheckResult(
             id: "window", title: "Opens its window", status: note == nil ? .passed : .warning,
-            detail: note.map { "It didn't: \($0)." } ?? "The plugin's view opened in a window, and stayed open through the tests that follow.",
+            detail: note.map { "It didn't: \($0)." } ?? Self.windowOpenedDetail,
             hint: "Hosts call requestViewController; an AUv3 with a UI should return its view controller promptly."))
     }
 

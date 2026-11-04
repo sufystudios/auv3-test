@@ -9,6 +9,8 @@ Use this when you're working on an Audio Unit plugin and need to know whether it
 3. Read the exit code, then `checks[].status`.
 4. For each `failed` (then `warning`) check, read `detail` (what happened, with numbers) and `hint` (the usual cause and fix). Fix the plugin, rebuild, reinstall and run again.
 
+For a plugin on iOS, run `./auv3-test-ios <device or simulator> <type> <subtype> <manufacturer> --json` instead. It prints the same report and returns the same exit codes, plus `3` if the runner couldn't be built, installed or launched. A real device must be unlocked, and needs `DEVELOPMENT_TEAM` set to sign the runner. If the device is locked, ask the user to unlock it; don't retry in a loop. `--snapshot` is Mac-only.
+
 A full run takes about 30 seconds in real time. Add `--fast` for a quick iteration, but rerun without it before concluding a timing problem is fixed, because `--fast` doesn't pace like a real audio thread.
 
 ## Make sure you're testing the build you just made
@@ -25,7 +27,7 @@ This is the most common way to waste a session:
 ```json
 {
   "tool": "auv3-test",
-  "toolVersion": "0.2.0",
+  "toolVersion": "0.3.0",
   "plugin": { "name": "…", "manufacturer": "…", "codes": "aumu Dron Sufy", "version": "1.6.0",
               "isAUv3": true, "hasCustomView": true, "parameterCount": 81 },
   "settings": { "sampleRate": "48000 Hz", "blockSize": "512 frames", "…": "…" },
