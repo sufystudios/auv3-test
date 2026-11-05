@@ -14,6 +14,115 @@ extension TestRun {
         return (recorder.mono().samples, stats)
     }
 
+    // MARK: Two instances
+
+    /// Hosts load a plugin on several tracks at once. One that keeps its state in
+    /// statics or singletons - a shared parameter tree, engine or voice - plays one
+    /// track's notes on another, or moves both when one knob turns.
+    func checkTwoInstances() {
+        log("Loading a second instance alongside the first")
+        let a = host
+        let b: PluginHost
+        do {
+            b = try PluginHost(options: options)
+            try b.prepare()
+        } catch {
+            checks.append(CheckResult(id: "two-instances", title: "Runs as two independent instances", status: .warning,
+                detail: "A second instance wouldn't load or start: \(error).",
+                hint: "Hosts load a plugin once per track. Make sure nothing in your AU or extension is meant to exist only once."))
+            return
+        }
+        defer { b.stop() }
+
+        /// Renders both, A then B each cycle as a host's graph does, keeping A's audio.
+        func renderBoth(_ seconds: Double, _ perBlock: @escaping (Int) -> Void = { _ in }) -> [Float] {
+            let recorder = SampleRecorder(frames: Int(seconds * a.sampleRate) + 8_192)
+            a.recorder = recorder
+            let blocks = Int((seconds / a.blockDuration).rounded(.up))
+            let realTime = options.realTime
+            let done = DispatchSemaphore(value: 0)
+            let thread = Thread {
+                let start = DispatchTime.now().uptimeNanoseconds
+                for index in 0..<blocks {
+                    perBlock(index)
+                    _ = a.renderBlock()
+                    _ = b.renderBlock()
+                    if realTime {
+                        let deadline = start + UInt64(Double(index + 1) * a.blockDuration * 1e9)
+                        let now = DispatchTime.now().uptimeNanoseconds
+                        if deadline > now { usleep(useconds_t((deadline - now) / 1_000)) }
+                    }
+                }
+                done.signal()
+            }
+            thread.qualityOfService = .userInteractive
+            thread.start()
+            done.wait()
+            a.recorder = nil
+            return recorder.mono().samples
+        }
+
+        var problems: [(failed: Bool, text: String)] = []
+        var hints: [String] = []
+        var m: [String: Double] = [:]
+        _ = renderBoth(0.5)  // Let anything still sounding in A fade.
+
+        // 1. B's note mustn't sound in A.
+        if a.isInstrument {
+            let leaked = renderBoth(1) { index in if index == 0 { b.noteOn(48) } }
+            _ = renderBoth(0.3) { index in if index == 0 { b.noteOff(48) } }
+            let peak = SoundAnalysis.peak(leaked[...])
+            m["peakInFirstFromSecondsNote"] = Double(peak)
+            if peak > 1e-3 {
+                problems.append((true, "A note played on the second instance sounded in the first (peak \(Int(SoundAnalysis.decibels(peak))) dBFS)."))
+                hints.append("The instances share a voice, engine or audio graph - a static, a singleton, or one created once per process. Make each AUAudioUnit build its own.")
+            }
+        }
+
+        // 2. B's controls mustn't move A's: first how much A varies by itself, then
+        // with B's parameters all changed.
+        let note = Self.pitchNote
+        if a.isInstrument { _ = renderBoth(0.3) { index in if index == 0 { a.noteOn(note) } } }
+        let before = renderBoth(1), steady = renderBoth(1)
+        let aTree = a.audioUnit.parameterTree?.allParameters ?? []
+        let aValues = aTree.map(\.value)
+        let bTargets = (b.audioUnit.parameterTree?.allParameters ?? []).filter { $0.flags.contains(.flag_IsWritable) && $0.maxValue > $0.minValue }
+        for (i, parameter) in bTargets.enumerated() {
+            parameter.setValue(Self.sweep(parameter, t: 7.3, lane: i), originator: nil)
+        }
+        let after = renderBoth(1)
+        if a.isInstrument { _ = renderBoth(0.3) { index in if index == 0 { a.noteOff(note) } } }
+
+        let movedInA = zip(aTree, aValues).filter { abs($0.0.value - $0.1) > max(1e-4, ($0.0.maxValue - $0.0.minValue) * 1e-3) }
+        if !bTargets.isEmpty && !movedInA.isEmpty {
+            problems.append((true, "Setting the second instance's parameters changed \(movedInA.count) of the first's (\(movedInA.prefix(4).map { $0.0.identifier }.joined(separator: ", ")))."))
+            hints.append("The instances share a parameter tree or the values behind it. Build the AUParameterTree, and whatever stores its values, per instance.")
+        }
+        func level(_ x: [Float]) -> Double { SoundAnalysis.decibels(SoundAnalysis.rms(x[...])) }
+        let drift = abs(level(steady) - level(before)), change = abs(level(after) - level(steady))
+        m["levelDriftDb"] = (drift * 10).rounded() / 10
+        m["levelChangeDb"] = (change * 10).rounded() / 10
+        if !bTargets.isEmpty, level(before) > -60, change > max(3, 3 * drift) {
+            problems.append((true, "The first instance's sound changed by \(String(format: "%.1f", change)) dB when the second's parameters changed (it drifts by \(String(format: "%.1f", drift)) dB on its own)."))
+            hints.append("The DSP state is shared between instances: look for static or global filter, oscillator or buffer state in the kernel.")
+        }
+        if a.isInstrument, let p1 = SoundAnalysis.steadyPitch(steady[...], sampleRate: a.sampleRate),
+           let p2 = SoundAnalysis.steadyPitch(after[...], sampleRate: a.sampleRate), abs(1200 * log2(p2 / p1)) > 10 {
+            problems.append((true, "The first instance's pitch moved from \(String(format: "%.1f", p1)) to \(String(format: "%.1f", p2)) Hz when the second's parameters changed."))
+            hints.append("Tuning or oscillator state is shared between instances.")
+        }
+
+        restoreStartingValues()
+        checks.append(CheckResult(
+            id: "two-instances", title: "Runs as two independent instances",
+            status: problems.contains { $0.failed } ? .failed : .passed,
+            detail: problems.isEmpty
+                ? "A second instance loaded alongside the first; its notes and its \(bTargets.count) parameters left the first alone."
+                : problems.map(\.text).joined(separator: " "),
+            hint: hints.isEmpty ? "Everything an instance uses should belong to that instance." : hints.joined(separator: " "),
+            measurements: m))
+    }
+
     // MARK: Sample rates
 
     static let testRates: [Double] = [44_100, 48_000, 96_000]

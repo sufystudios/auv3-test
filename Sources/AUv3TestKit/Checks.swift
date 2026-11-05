@@ -37,6 +37,7 @@ final class TestRun: @unchecked Sendable {
         checkClicks()
         checkParameterReadBack()
         checkStateRestore()
+        checkTwoInstances()
         checkSampleRates()
     }
 
@@ -436,7 +437,7 @@ final class TestRun: @unchecked Sendable {
 
     private lazy var startingValues: [(AUParameter, AUValue)] = writableParameters.map { ($0, $0.value) }
 
-    private func restoreStartingValues() {
+    func restoreStartingValues() {
         for (parameter, value) in startingValues { parameter.setValue(value, originator: nil) }
     }
 
