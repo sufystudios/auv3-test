@@ -27,7 +27,7 @@ This is the most common way to waste a session:
 ```json
 {
   "tool": "auv3-test",
-  "toolVersion": "0.3.0",
+  "toolVersion": "0.4.0",
   "plugin": { "name": "…", "manufacturer": "…", "codes": "aumu Dron Sufy", "version": "1.6.0",
               "isAUv3": true, "hasCustomView": true, "parameterCount": 81 },
   "settings": { "sampleRate": "48000 Hz", "blockSize": "512 frames", "…": "…" },
@@ -67,7 +67,15 @@ Run with `--save-audio <dir>` to get each phase as a 32-bit float WAV (`01-plays
 
 Run with `--snapshot <file.png>` (and optionally `--window-size <WxH>`) to save an image of the plugin's window after the checks. An AUv3's view is drawn by the plugin's own process, so auv3-test captures that part of the screen with its window raised to the front; `settings.snapshot` in the JSON says where it went, or why it wasn't saved. Look at the image before using it: if macOS has an older copy of the plugin registered, that's the one shown.
 
-Zipper noise (stepped, crackly automation) isn't detected yet; listen for it in `02-render-thread-automation.wav`.
+## Scenarios: test what the user is hearing
+
+When a user reports a sound problem ("the delay is silent", "the filter crackles when I sweep it", "it's out of tune"), write a scenario that does what they did and expects what they should hear, rather than guessing from the code. The README has the format. For example, for "I can't hear the delay": set the delay's mix, play a short note, release it, then `{ "wait": 2, "expect": "sound" }`. If that step fails, the echo isn't reaching the output.
+
+- Run it with `--json --spectrogram <png>`, read each `step-N` check, then **look at the spectrogram**. The numbers say that something is wrong; the picture often says what: stairs on a sweep (zipper noise), a vertical line (click), a sound starting late or stopping dead.
+- To find the parameter names, use a deliberately wrong name: the failure lists the plugin's identifiers.
+- Keep the scenario and rerun it after the fix. It's a regression test for that report.
+- `measurements.onsetSeconds` on play steps shows how long notes take to sound. A plugin that takes hundreds of milliseconds is late in every DAW, even if each check passes.
+- A pitch far off in one environment and right in another is usually the plugin's saved state (a transposed patch, a tuning setting), not its maths. Check the state before changing code.
 
 ## Don't
 

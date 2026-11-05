@@ -92,7 +92,14 @@ public enum AUv3Test {
                 }
                 let run = TestRun(host: host, options: options, log: log)
                 run.capturePrepared()
-                run.runAll()
+                if let scenario = options.scenario {
+                    report.settings["scenario"] = scenario.name ?? "\(scenario.steps.count) steps"
+                    report.settings.removeValue(forKey: "secondsPerPhase")
+                    if options.showUI { _ = host.openWindow() }
+                    report.settings.merge(run.runScenario(scenario, spectrogram: options.spectrogram)) { $1 }
+                } else {
+                    run.runAll()
+                }
                 report.checks = run.checks
                 if let capture = host.capture {
                     report.audioFiles = capture.written.map(\.path)

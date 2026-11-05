@@ -6,7 +6,7 @@ import AudioToolbox
 final class TestRun: @unchecked Sendable {
     let host: PluginHost
     let options: Options
-    private(set) var checks: [CheckResult] = []
+    var checks: [CheckResult] = []  // Scenario.swift adds its steps too.
     private let log: (String) -> Void
 
     /// A plain render error, a non-finite sample, a silent instrument: anything the
@@ -58,7 +58,7 @@ final class TestRun: @unchecked Sendable {
     /// Renders `seconds` of audio, in real time unless --fast. `perBlock` runs on the
     /// render thread before each block, with the block's index.
     /// With a `name`, the phase's audio is saved when the run is saving audio.
-    private func render(seconds: Double, name: String? = nil, perBlock: @escaping (Int) -> Void = { _ in }) -> PhaseStats {
+    func render(seconds: Double, name: String? = nil, perBlock: @escaping (Int) -> Void = { _ in }) -> PhaseStats {
         var stats = PhaseStats()
         if let name { host.capture?.begin(name, seconds: seconds) }
         defer { if name != nil { host.capture?.finish() } }

@@ -21,6 +21,10 @@ struct Options {
     var snapshot: URL?
     /// The plugin window's content size, instead of the size the plugin asks for.
     var windowSize: CGSize?
+    /// A scenario to play instead of the standard checks (see Scenario.swift).
+    var scenario: Scenario?
+    /// Where to save a spectrogram of the scenario as a PNG, if anywhere.
+    var spectrogram: URL?
 
     static let usage = """
     auv3-test: tests an Audio Unit v3 plugin the way a host does.
@@ -45,6 +49,11 @@ struct Options {
       --snapshot <png>     Save the plugin's window as a PNG after the tests (for store
                            screenshots or docs). Needs the window, so not with --no-ui.
       --window-size <WxH>  Open the plugin's window at this content size, in points.
+      --scenario <json>    Play these steps instead of the standard checks, and measure
+                           each one: level, clipping, clicks, zipper noise, cut-offs,
+                           fades and pitch. See the README for the format.
+      --scenario-json <text>  The same, with the scenario itself on the command line.
+      --spectrogram <png>  With a scenario, save a picture of its sound, step by step.
       --verbose            Print progress while testing.
       --help
 
@@ -87,6 +96,25 @@ struct Options {
                     return .error("--window-size needs a size like 1400x500")
                 }
                 options.windowSize = CGSize(width: parts[0], height: parts[1])
+            case "--scenario", "--scenario-json":
+                guard let v = value() else { return .error("\(argument) needs a scenario") }
+                let data: Data
+                if argument == "--scenario" {
+                    guard let contents = FileManager.default.contents(atPath: (v as NSString).expandingTildeInPath) else {
+                        return .error("couldn't read the scenario file \(v)")
+                    }
+                    data = contents
+                } else {
+                    data = Data(v.utf8)
+                }
+                do {
+                    options.scenario = try Scenario.load(data)
+                } catch {
+                    return .error(String(describing: error))
+                }
+            case "--spectrogram":
+                guard let v = value(), !v.hasPrefix("--") else { return .error("--spectrogram needs a file name") }
+                options.spectrogram = URL(fileURLWithPath: (v as NSString).expandingTildeInPath)
             case "--seconds":
                 guard let v = value().flatMap(Double.init), v > 0 else { return .error("--seconds needs a positive number") }
                 options.seconds = v
@@ -102,6 +130,7 @@ struct Options {
             }
         }
         if list { return .list(json: options.json) }
+        if options.spectrogram != nil && options.scenario == nil { return .error("--spectrogram draws a scenario: add --scenario") }
         guard codes.count == 3 else { return .error("give the plugin's type, subtype and manufacturer codes, e.g. aumu Dron Sufy") }
         guard let type = fourCC(codes[0]), let subtype = fourCC(codes[1]), let manufacturer = fourCC(codes[2]) else {
             return .error("each code must be exactly four characters, e.g. aumu Dron Sufy")

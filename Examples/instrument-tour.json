@@ -1,0 +1,11 @@
+{
+  "name": "Instrument tour: notes, filter sweep, release, tuning",
+  "steps": [
+    { "play": [48, 55, 60], "for": 2, "expect": "sound" },
+    { "sweep": "cutoff", "from": 200, "to": 8000, "over": 4 },
+    { "set": "cutoff", "to": 1000, "for": 1 },
+    { "release": "all", "for": 3 },
+    { "play": 57, "for": 2, "expect": ["sound", "in-tune"] },
+    { "release": "all", "for": 3, "expect": "silence" }
+  ]
+}

@@ -4,7 +4,7 @@ A command-line host that tests an Audio Unit v3 plugin on macOS (and on an iPhon
 
 ```
 $ auv3-test aumu Dron Sufy
-auv3-test 0.3.0
+auv3-test 0.4.0
 Plugin:  DroneSynth by Sufy Studios  [aumu Dron Sufy]  version 1.6.0
          AUv3, 81 parameters, has its own window
 
@@ -111,7 +111,50 @@ After that, `auv3-test-ios` signs the runner with the same profile. Leave the pr
 
 Each failure or warning comes with a hint: the usual cause and fix.
 
-**What the sound checks don't hear.** They catch silence, NaN and infinite samples, extreme levels and clicks (a sudden step in the waveform, like a gain applied in one sample). They don't yet catch *zipper noise*: a parameter moving in small audible steps as automation updates it. A filter cutoff jumping to a new value changes how bright the sound is without a step in the waveform, so it doesn't count as a click. Use `--save-audio` and listen when you're chasing that.
+**What the standard checks don't hear.** They catch silence, NaN and infinite samples, extreme levels and clicks (a sudden step in the waveform, like a gain applied in one sample). For zipper noise, tuning, tails and the rest, write a scenario (below).
+
+## Scenarios: play it, then measure what came out
+
+A scenario plays the plugin step by step, as a person (or an agent) trying it would: notes, parameter changes and sweeps, played from the render thread as a DAW plays a track. Then each step's audio is measured and reported as a check, with the same ✓, ! and ✗.
+
+```sh
+auv3-test aumu Dron Sufy --scenario Examples/instrument-tour.json --spectrogram tour.png
+./auv3-test-ios "My iPad" aumu Dron Sufy --scenario Examples/delay-echo.json
+```
+
+```json
+{ "name": "Filter and delay",
+  "steps": [
+    { "play": [48, 55, 60], "for": 2, "expect": "sound" },
+    { "sweep": "cutoff", "from": 200, "to": 8000, "over": 4 },
+    { "set": "delayWet", "to": "50%", "for": 2 },
+    { "release": "all", "for": 3, "expect": "silence" },
+    { "play": 57, "for": 2, "expect": "in-tune" } ] }
+```
+
+| Step | Does | Lasts (default) |
+|---|---|---|
+| `"play": 60` or `[48, 55]` | note-ons, held until released (`"velocity"` 1-127, default 100) | `"for"` (2 s) |
+| `"release": "all"` or notes | note-offs | `"for"` (2 s), to hear the tail |
+| `"set": "<parameter>", "to": v` | one automation event | `"for"` (1 s) |
+| `"sweep": "<parameter>", "from": a, "to": b` | automation on every block; frequencies sweep evenly in pitch | `"over"` (4 s) |
+| `"wait": 3` | nothing | 3 s |
+
+Parameters are named by identifier, key path, display name (any case) or address; a name the plugin doesn't have fails at once and lists the ones it does. Values are in the parameter's units, or `"50%"` of its range. Add `"expect": "sound"` (peaks above -50 dBFS), `"silence"` (quiet by the step's last half second) or `"in-tune"` (a single note within 10 cents, octaves aside) to make a step a test. A second of unmeasured silence plays first, as a host has been running before anyone plays.
+
+Every step reports its level, and warns or fails on:
+
+- **clipping**, **DC offset**, NaNs, render errors and late or stalled render calls;
+- **clicks**: an edge in the waveform at least 4× sharper than the sound on both sides of it (so a filter opening doesn't count; a played note's own onset is left out);
+- **zipper noise** (sweeps): the waveform sharper at the start of each render block than elsewhere, the mark of a value applied in steps as automation arrives;
+- **sudden cuts**: 40 dB lost within 10 ms while audible;
+- **pitch** (a single note): measured three times across the step's second half, and only trusted when the readings agree.
+
+It also measures, without judging: how long after the note-on the sound began, and how long a release takes to fade by 60 dB. In the JSON they're in each step's `measurements` (`onsetSeconds`, `decaySeconds`, `pitchHz`, `centsOff`, `zipperRatio`, `clickRatio`…).
+
+`--spectrogram <png>` draws the whole scenario: time across, frequency up (log, 30 Hz to 20 kHz), with numbered lines where steps start. It's for looking at what the numbers describe: a click is a thin vertical line, zipper noise a sweep drawn as stairs, aliasing lines folding back down, a cut a sudden dark edge. With `--save-audio <dir>`, the scenario is saved as one WAV. On iOS, `--spectrogram` and `--save-audio` are Mac-only for now.
+
+Measurements find defects; they can't tell you whether a plugin *sounds good*. That's still for ears: the WAVs let you A/B a scenario before and after a change.
 
 Rendering happens on a dedicated `.userInteractive` thread, paced in real time, calling the plugin's `renderBlock` directly as a host's audio thread does. The host supplies a 120 BPM 4/4 `musicalContextBlock` and a playing `transportStateBlock`, and schedules MIDI and automation from the render thread with `scheduleMIDIEventBlock` and `scheduleParameterBlock`. The plugin's window stays open throughout, because many render-thread bugs only appear while the UI is alive.
 
@@ -121,7 +164,7 @@ Rendering happens on a dedicated `.userInteractive` thread, paced in real time, 
 swift test --scratch-path /tmp/auv3-test-build
 ```
 
-The tests check the click detector on made-up signals where the right answer is known. Pass a `--scratch-path` outside `~/Documents` if that folder syncs to iCloud: the extended attributes iCloud adds make code signing the test bundle fail.
+The tests check the click detector and the scenario measurements (pitch, zipper noise, clicks, cuts and fades) on made-up signals where the right answer is known. Pass a `--scratch-path` outside `~/Documents` if that folder syncs to iCloud: the extended attributes iCloud adds make code signing the test bundle fail.
 
 ## For coding agents
 

@@ -55,6 +55,13 @@ while [[ $# -gt 0 ]]; do
         snapshot=${2:A}
         args+=(--snapshot on-device.png)
         shift 2
+    elif [[ "$1" == "--scenario" && $# -gt 1 ]]; then
+        # The device can't read the Mac's files: pass the scenario itself.
+        [[ -r "$2" ]] || fail "couldn't read the scenario file $2"
+        args+=(--scenario-json "$(<"$2")")
+        shift 2
+    elif [[ "$1" == "--spectrogram" || "$1" == "--save-audio" ]]; then
+        fail "$1 is Mac-only for now: run the scenario with auv3-test on the Mac to get the picture or the audio"
     else
         args+=("$1")
         shift

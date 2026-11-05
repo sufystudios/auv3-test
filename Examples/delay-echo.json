@@ -1,0 +1,10 @@
+{
+  "name": "Delay: an echo after the note fades",
+  "steps": [
+    { "set": "delayWet", "to": "50%", "for": 0.2 },
+    { "play": 60, "for": 0.4 },
+    { "release": "all", "for": 1 },
+    { "wait": 2, "expect": "sound" },
+    { "set": "delayWet", "to": 0, "for": 3, "expect": "silence" }
+  ]
+}

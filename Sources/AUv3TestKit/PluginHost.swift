@@ -305,6 +305,8 @@ final class PluginHost: @unchecked Sendable {
 
     /// Where rendered audio goes as well, when the run is saving it.
     var capture: AudioCapture?
+    /// Where a scenario keeps every sample, to measure afterwards.
+    var recorder: SampleRecorder?
 
     var blockDuration: Double { Double(options.blockSize) / options.sampleRate }
 
@@ -353,7 +355,15 @@ final class PluginHost: @unchecked Sendable {
                 edge = max(edge, edgeMeters[channel].measure(x))
             }
         }
-        if status == noErr { capture?.append(output) }
+        if status == noErr {
+            capture?.append(output)
+            recorder?.append(output)
+        } else if let recorder {
+            // Keep the timeline whole: a failed block is silence.
+            for buffer in rendered { memset(buffer.mData, 0, Int(buffer.mDataByteSize)) }
+            output.frameLength = frames
+            recorder.append(output)
+        }
         sampleTime += Double(frames)
         return BlockResult(status: status, duration: duration, peak: peak, nonFinite: nonFinite, edge: edge)
     }
