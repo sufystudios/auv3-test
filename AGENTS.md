@@ -77,6 +77,10 @@ When a user reports a sound problem ("the delay is silent", "the filter crackles
 - `measurements.onsetSeconds` on play steps shows how long notes take to sound. A plugin that takes hundreds of milliseconds is late in every DAW, even if each check passes.
 - A pitch far off in one environment and right in another is usually the plugin's saved state (a transposed patch, a tuning setting), not its maths. Check the state before changing code.
 
+## When the user is the one playing
+
+`--play` is for a person: it plays the plugin through the speakers until they press Return, close its window, or `--seconds` run out. Don't run it unattended, or when the user may not want sound (late at night, say). Ask them to run it, then read the `live` check: its detail is a numbered timeline of problems, each with the controls moved and notes played at that moment. Turn the worst lines into scenarios (set or sweep those controls, play those notes) so the fix can be tested without them.
+
 ## Don't
 
 - Don't loosen a check to make a plugin pass. The thresholds match what's audible in a DAW.

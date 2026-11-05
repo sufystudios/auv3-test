@@ -157,6 +157,27 @@ It also measures, without judging: how long after the note-on the sound began, a
 
 Measurements find defects; they can't tell you whether a plugin *sounds good*. That's still for ears: the WAVs let you A/B a scenario before and after a change.
 
+## Play it yourself, and get a timeline of what went wrong
+
+```sh
+auv3-test aumu Dron Sufy --play --spectrogram session.png --save-audio session/
+./auv3-test-ios "My iPad" aumu Dron Sufy --play --seconds 90
+```
+
+`--play` opens the plugin and plays it through the speakers, for you to play: its own keys and controls, or any MIDI keyboard connected (every MIDI source is listened to). Stop by pressing Return in the terminal or closing the plugin's window, or let `--seconds` run out (default 120, at most 600). On iOS, the plugin's view fills the device's screen; play it there until the time is up.
+
+Then you get a timeline, with what you were doing at each moment:
+
+```
+! Plays live without a problem
+    48.2 s played, 31 notes, 212 control moves (Cutoff, Delay Time, Resonance).
+    1. 0:12.31 click (9× sharper than around it), while Delay Time moved
+    2. 0:30.02 cut out (down 52 dB in 10 ms), as C3 played
+    3. 0:41.77 dropout: a render call took 140 ms, while Preset moved
+```
+
+It catches what people do that scripts don't think of: twisting two knobs at once, playing during a preset change, holding notes through a delay-time sweep. Each line says when, so you can find the moment in the WAV, and what was moving, so you can write a scenario that does the same thing every time. With `--spectrogram`, the timeline's problems are numbered lines on the picture.
+
 Rendering happens on a dedicated `.userInteractive` thread, paced in real time, calling the plugin's `renderBlock` directly as a host's audio thread does. The host supplies a 120 BPM 4/4 `musicalContextBlock` and a playing `transportStateBlock`, and schedules MIDI and automation from the render thread with `scheduleMIDIEventBlock` and `scheduleParameterBlock`. The plugin's window stays open throughout, because many render-thread bugs only appear while the UI is alive.
 
 ## Development

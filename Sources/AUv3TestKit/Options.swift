@@ -23,8 +23,11 @@ struct Options {
     var windowSize: CGSize?
     /// A scenario to play instead of the standard checks (see Scenario.swift).
     var scenario: Scenario?
-    /// Where to save a spectrogram of the scenario as a PNG, if anywhere.
+    /// Where to save a spectrogram of the scenario (or live session) as a PNG, if anywhere.
     var spectrogram: URL?
+    /// Play the plugin live through the speakers, for a person to play, instead of the
+    /// standard checks; up to `seconds` long (see LiveSession.swift).
+    var live = false
 
     static let usage = """
     auv3-test: tests an Audio Unit v3 plugin the way a host does.
@@ -54,6 +57,11 @@ struct Options {
                            fades and pitch. See the README for the format.
       --scenario-json <text>  The same, with the scenario itself on the command line.
       --spectrogram <png>  With a scenario, save a picture of its sound, step by step.
+      --play               Play the plugin yourself, through the speakers: its own keys
+                           or a MIDI keyboard. Stop with Return, by closing its window,
+                           or after --seconds (default 120). Then get a timeline of
+                           clicks, cut-outs, clipping and late renders, with the
+                           controls you were moving at the time.
       --verbose            Print progress while testing.
       --help
 
@@ -83,6 +91,7 @@ struct Options {
             case "--json": options.json = true
             case "--no-ui": options.showUI = false
             case "--fast": options.realTime = false
+            case "--play": options.live = true
             case "--verbose", "-v": options.verbose = true
             case "--save-audio":
                 guard let v = value(), !v.hasPrefix("--") else { return .error("--save-audio needs a folder") }
@@ -130,7 +139,12 @@ struct Options {
             }
         }
         if list { return .list(json: options.json) }
-        if options.spectrogram != nil && options.scenario == nil { return .error("--spectrogram draws a scenario: add --scenario") }
+        if options.spectrogram != nil && options.scenario == nil && !options.live {
+            return .error("--spectrogram draws a scenario or a live session: add --scenario or --play")
+        }
+        if options.live && options.scenario != nil { return .error("--play and --scenario don't go together: pick one") }
+        if options.live && !arguments.contains("--seconds") { options.seconds = 120 }
+        if options.live && options.seconds > 600 { return .error("--play lasts at most 600 seconds") }
         guard codes.count == 3 else { return .error("give the plugin's type, subtype and manufacturer codes, e.g. aumu Dron Sufy") }
         guard let type = fourCC(codes[0]), let subtype = fourCC(codes[1]), let manufacturer = fourCC(codes[2]) else {
             return .error("each code must be exactly four characters, e.g. aumu Dron Sufy")

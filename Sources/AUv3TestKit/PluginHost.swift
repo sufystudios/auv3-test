@@ -310,6 +310,9 @@ final class PluginHost: @unchecked Sendable {
 
     var blockDuration: Double { Double(options.blockSize) / options.sampleRate }
 
+    /// The block `renderBlock` just made, until the next call: a live session plays it.
+    var renderedOutput: AVAudioPCMBuffer { output }
+
     /// Renders one block, as the host's audio thread does each cycle. `beforeRender`
     /// runs first on the same thread: where a host schedules MIDI and automation.
     func renderBlock(_ beforeRender: (_ sampleTime: Double) -> Void = { _ in }) -> BlockResult {

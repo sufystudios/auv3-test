@@ -49,6 +49,12 @@ shift
 # when it's ready (it's drawn by the plugin's own process, so only a capture of the
 # screen shows it), and this captures the device's screen from here.
 args=()
+live=0
+seconds=120
+for (( i = 1; i <= $#; i++ )); do
+    [[ "${@[i]}" == "--play" ]] && live=1
+    [[ "${@[i]}" == "--seconds" ]] && seconds=${@[i+1]}
+done
 snapshot=""
 audio_dir=""
 spectrogram=""
@@ -86,6 +92,11 @@ launch() {
     local log=$(mktemp -t auv3-test-ios)
     "$@" >"$log" 2>&1 &
     local runner=$!
+    if (( live )); then
+        # Tell the person at the device when to start playing.
+        while kill -0 $runner 2>/dev/null && ! grep -q "Playing .* live" "$log"; do sleep 0.3; done
+        grep -q "Playing .* live" "$log" && print -u2 "▶︎ Play the plugin on $device now: its keys, its controls or a MIDI keyboard. It records for up to $seconds s."
+    fi
     if [[ -n "$snapshot" ]]; then
         while kill -0 $runner 2>/dev/null && ! grep -q "=== auv3-test snapshot ready ===" "$log"; do sleep 0.5; done
         if grep -q "=== auv3-test snapshot ready ===" "$log"; then

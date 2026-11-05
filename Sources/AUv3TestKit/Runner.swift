@@ -97,10 +97,19 @@ public enum AUv3Test {
                     report.settings.removeValue(forKey: "secondsPerPhase")
                     if options.showUI { _ = host.openWindow() }
                     report.settings.merge(run.runScenario(scenario, spectrogram: options.spectrogram)) { $1 }
+                    report.checks = run.checks
+                } else if options.live {
+                    report.settings["mode"] = "played live"
+                    report.settings.removeValue(forKey: "secondsPerPhase")
+                    report.settings.removeValue(forKey: "realTime")
+                    if options.showUI { _ = host.openWindow() }
+                    let (checks, settings) = LiveSession(host: host, options: options, log: log).run(spectrogram: options.spectrogram)
+                    report.checks = checks
+                    report.settings.merge(settings) { $1 }
                 } else {
                     run.runAll()
+                    report.checks = run.checks
                 }
-                report.checks = run.checks
                 if let capture = host.capture {
                     report.audioFiles = capture.written.map(\.path)
                     if !capture.errors.isEmpty { report.settings["audioErrors"] = capture.errors.joined(separator: "; ") }
