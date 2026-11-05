@@ -7,8 +7,9 @@
 #   ./auv3-test-ios --devices
 #
 # <device> is a connected device's or a simulator's name (as `--devices` lists them) or
-# its identifier. The options are the Mac command line's (`auv3-test --help`); --snapshot
-# and --window-size are Mac-only.
+# its identifier. The options are the Mac command line's (`auv3-test --help`), except
+# --window-size: the plugin's view fills the screen. --snapshot <png> saves a capture of
+# the device's screen, with the plugin's view on it, here on the Mac.
 #
 # It builds the runner app (iOSRunner/AUv3TestRunner.xcodeproj), installs it, launches it
 # with your arguments and waits for its report. The plugin's app must be installed on the
@@ -44,6 +45,42 @@ device=$1
 shift
 [[ $# -gt 0 ]] || fail "say what to test: the plugin's codes (or --list) after the device"
 
+# --snapshot <png> names a file on this Mac. The runner shows the plugin's view and says
+# when it's ready (it's drawn by the plugin's own process, so only a capture of the
+# screen shows it), and this captures the device's screen from here.
+args=()
+snapshot=""
+while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--snapshot" && $# -gt 1 ]]; then
+        snapshot=${2:A}
+        args+=(--snapshot on-device.png)
+        shift 2
+    else
+        args+=("$1")
+        shift
+    fi
+done
+set -- "${args[@]}"
+
+# Runs the launch command, printing nothing, and leaves its output in $output. With
+# --snapshot, captures the screen (with the command in $capture, plus the file) once the
+# runner says the plugin's view is ready.
+launch() {
+    local log=$(mktemp -t auv3-test-ios)
+    "$@" >"$log" 2>&1 &
+    local runner=$!
+    if [[ -n "$snapshot" ]]; then
+        while kill -0 $runner 2>/dev/null && ! grep -q "=== auv3-test snapshot ready ===" "$log"; do sleep 0.5; done
+        if grep -q "=== auv3-test snapshot ready ===" "$log"; then
+            "${capture[@]}" "$snapshot" >/dev/null 2>&1 && print -u2 "… Saved the plugin's screen to $snapshot" \
+                || print -u2 "auv3-test-ios: couldn't capture the screen for --snapshot"
+        fi
+    fi
+    wait $runner
+    output=$(<"$log")
+    rm -f "$log"
+}
+
 # A simulator, by name or UDID?
 # Exactly: "iPad" mustn't pick the simulator "iPad (A16)".
 sim=$(xcrun simctl list devices available | grep -E "^\s+$device \([0-9A-F-]{36}\)|\($device\)" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
@@ -56,7 +93,8 @@ if [[ -n "$sim" ]]; then
     xcrun simctl bootstatus "$sim" -b >/dev/null || fail "the simulator didn't start"
     xcrun simctl install "$sim" "$app" || fail "couldn't install the runner in the simulator"
     print -u2 "… Testing (a minute or so)"
-    output=$(xcrun simctl launch --console-pty --terminate-running-process "$sim" "$bundle" "$@" 2>&1)
+    capture=(xcrun simctl io "$sim" screenshot)
+    launch xcrun simctl launch --console-pty --terminate-running-process "$sim" "$bundle" "$@"
 else
     # A connected device, by name or identifier.
     udid=$(xcrun devicectl list devices 2>/dev/null | awk -v d="$device" 'NR > 2 && /physical/ && (index($0, d" ") == 1 || index($0, d))' \
@@ -76,7 +114,8 @@ else
     app="$build/Build/Products/Debug-iphoneos/AUv3TestRunner.app"
     xcrun devicectl device install app --device "$udid" "$app" >/dev/null 2>&1 || fail "couldn't install the runner on $device"
     print -u2 "… Testing on $device (a minute or so; keep it unlocked)"
-    output=$(xcrun devicectl device process launch --device "$udid" --console --terminate-existing "$bundle" "$@" 2>&1)
+    capture=(xcrun devicectl device capture screenshot --device "$udid" --destination)
+    launch xcrun devicectl device process launch --device "$udid" --console --terminate-existing "$bundle" "$@"
     if [[ "$output" == *"could not be, unlocked"* ]]; then
         fail "$device is locked: unlock it and try again"
     fi

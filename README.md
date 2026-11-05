@@ -79,7 +79,8 @@ An AUv3 must be registered before macOS can see it: open its containing app once
 ./auv3-test-ios "My iPad" aumu Dron Sufy --json   # on a device (after the one-time setup)
 ```
 
-- The options are the same as on the Mac, except `--snapshot` and `--window-size`. The exit codes are too, plus `3` if the runner couldn't be built, installed or launched.
+- The options are the same as on the Mac, except `--window-size`: the plugin's view fills the screen, as in GarageBand or AUM. The exit codes are the same too, plus `3` if the runner couldn't be built, installed or launched.
+- `--snapshot <png>` saves a capture of the device's screen with the plugin's view on it, here on the Mac (for store screenshots of the plugin on iPhone and iPad). The view is shown full screen throughout the run, as a host would.
 - Install the plugin's app on the device or simulator, and open it once so iOS registers its Audio Unit.
 - A real device must be unlocked, trusted and in Developer Mode. A device and a simulator with the same name: pass the device's identifier from `--devices`.
 - Run with no arguments (tapping its icon, or from Xcode), the runner lists the plugins it can see.

@@ -102,7 +102,12 @@ public enum AUv3Test {
                     if let problem = options.showUI ? host.snapshot(to: snapshot) : "--snapshot needs the window (not --no-ui)" {
                         report.settings["snapshot"] = "not saved: \(problem)"
                     } else {
+                        #if os(macOS)
                         report.settings["snapshot"] = "saved to \(snapshot.path)"
+                        #else
+                        // auv3-test-ios captures the screen from the Mac, and says where it saved it.
+                        report.settings["snapshot"] = "shown on screen for auv3-test-ios to capture"
+                        #endif
                     }
                 }
                 if options.showUI { host.closeWindow() }

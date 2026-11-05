@@ -226,9 +226,9 @@ final class PluginHost: @unchecked Sendable {
         }
     }
     #else
-    /// Asks for the plugin's view, as GarageBand does when you open a plugin, and loads
-    /// it. There's no window to put it in from a test runner, but the view controller
-    /// arriving, and its view loading, is what a host needs. Returns a note if it didn't.
+    /// Asks for the plugin's view, as GarageBand does when you open a plugin, and shows it
+    /// full screen over the runner for the rest of the run, as a host would. Returns a
+    /// note if it has none or it couldn't be shown.
     func openWindow() -> String? {
         var note: String?
         let done = DispatchSemaphore(value: 0)
@@ -242,6 +242,20 @@ final class PluginHost: @unchecked Sendable {
                     }
                     controller.loadViewIfNeeded()
                     self.viewController = controller
+                    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                    guard let root = scenes.flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController
+                        ?? scenes.first?.windows.first?.rootViewController else {
+                        return  // No app window (unit tests): the loaded view is what counts.
+                    }
+                    let container = UIViewController()
+                    container.view.backgroundColor = .black
+                    container.modalPresentationStyle = .fullScreen
+                    container.addChild(controller)
+                    controller.view.frame = container.view.bounds
+                    controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                    container.view.addSubview(controller.view)
+                    controller.didMove(toParent: container)
+                    root.present(container, animated: false)
                 }
             }
         }
@@ -249,12 +263,26 @@ final class PluginHost: @unchecked Sendable {
         return note
     }
 
+    /// Marks the moment for `auv3-test-ios` to take the screenshot: the plugin's view is
+    /// drawn by its own process, so only a capture of the screen shows it. The script
+    /// watches for this line, captures the device's screen from the Mac and saves it;
+    /// the view stays up meanwhile. `url` is the Mac's path, so it isn't used here.
+    static let snapshotReadyMarker = "=== auv3-test snapshot ready ==="
+
     func snapshot(to url: URL) -> String? {
-        "snapshots need the Mac (auv3-test opens a window there)"
+        guard viewController != nil else { return "no view was open to snapshot" }
+        Thread.sleep(forTimeInterval: 1)  // Let the plugin finish drawing.
+        print(Self.snapshotReadyMarker)
+        fflush(stdout)
+        Thread.sleep(forTimeInterval: 6)  // Time for the Mac to capture the screen.
+        return nil
     }
 
     func closeWindow() {
-        DispatchQueue.main.sync { self.viewController = nil }
+        DispatchQueue.main.sync {
+            self.viewController?.parent?.dismiss(animated: false)
+            self.viewController = nil
+        }
     }
     #endif
 
