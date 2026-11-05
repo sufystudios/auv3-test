@@ -1,9 +1,9 @@
 import SwiftUI
 import AVFoundation
-import AUv3TestKit
 
 /// auv3-test on an iPhone or iPad: tests an AUv3 installed on the device, the way
-/// GarageBand or AUM loads it, and shows the report. `auv3-test-ios` installs this and
+/// GarageBand or AUM loads it, and shows the report. The checks (Sources/AUv3TestKit)
+/// are compiled into this app's target, so there's nothing to import. `auv3-test-ios` installs this and
 /// launches it with the plugin's codes and options as arguments (the same ones the Mac
 /// command line takes); the report is printed too, for the script, and the app quits
 /// when it's done. Opened by hand, with no arguments, it lists the plugins installed.

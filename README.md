@@ -70,19 +70,29 @@ An AUv3 must be registered before macOS can see it: open its containing app once
 
 ## On an iPhone, iPad or iOS Simulator
 
-`auv3-test-ios` runs the same checks on iOS, against a plugin installed there, and prints the report on your Mac. It builds a small runner app (`iOSRunner/AUv3TestRunner.swiftpm`), installs it, launches it with your arguments and collects the report.
+`auv3-test-ios` runs the same checks on iOS, against a plugin installed there, and prints the report on your Mac. It builds a small runner app (`iOSRunner/AUv3TestRunner.xcodeproj`, which compiles the same checks as the Mac tool), installs it, launches it with your arguments and collects the report.
 
 ```sh
-./auv3-test-ios --devices                                  # connected devices and simulators
-./auv3-test-ios "iPhone 17 Pro" --list                     # plugins installed in that simulator
-./auv3-test-ios "iPhone 17 Pro" aumu Dron Sufy             # test in a simulator
-DEVELOPMENT_TEAM=ABCDE12345 ./auv3-test-ios "My iPad" aumu Dron Sufy --json   # on a device
+./auv3-test-ios --devices                         # connected devices and simulators
+./auv3-test-ios "iPhone 17 Pro" --list            # plugins installed in that simulator
+./auv3-test-ios "iPhone 17 Pro" aumu Dron Sufy    # test in a simulator
+./auv3-test-ios "My iPad" aumu Dron Sufy --json   # on a device (after the one-time setup)
 ```
 
 - The options are the same as on the Mac, except `--snapshot` and `--window-size`. The exit codes are too, plus `3` if the runner couldn't be built, installed or launched.
-- A real device needs your Apple developer team ID to sign the runner (`DEVELOPMENT_TEAM`), and must be unlocked, trusted and in Developer Mode.
 - Install the plugin's app on the device or simulator, and open it once so iOS registers its Audio Unit.
-- The runner declares background audio, which iOS requires before it shows a host third-party Audio Units. Run with no arguments (from Xcode, say), it lists the plugins it can see.
+- A real device must be unlocked, trusted and in Developer Mode. A device and a simulator with the same name: pass the device's identifier from `--devices`.
+- Run with no arguments (tapping its icon, or from Xcode), the runner lists the plugins it can see.
+
+### One-time setup for devices
+
+On a real iPhone or iPad, iOS shows a host other apps' Audio Units only if it has the **Inter-App Audio** entitlement; without it, a host sees only Apple's own. (The Simulator doesn't check.) The runner has it, so it needs a provisioning profile made for it, which only Xcode can make, once:
+
+1. In your shell profile, set `DEVELOPMENT_TEAM` to your Apple developer team ID, and `AUV3_RUNNER_BUNDLE_ID` to a bundle ID of your own (e.g. `com.example.auv3-test-runner`).
+2. Open `iOSRunner/AUv3TestRunner.xcodeproj` in Xcode. In the target's Signing & Capabilities, pick your team and enter the same bundle ID.
+3. Choose your device and press Run. If signing complains about Inter-App Audio, use the fix Xcode offers, or add the Inter-App Audio capability, and run again. On the device, the list should now include your plugin.
+
+After that, `auv3-test-ios` signs the runner with the same profile. Leave the project's changes uncommitted.
 
 ## The checks
 

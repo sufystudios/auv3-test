@@ -1,0 +1,43 @@
+# The iOS runner's Xcode project, AUv3TestRunner.xcodeproj, is generated from this with
+# XcodeGen (`brew install xcodegen`, then `xcodegen` in this folder). Both are committed,
+# so you only need XcodeGen to change the project, not to use it.
+#
+# A normal Xcode project rather than a Swift package app, because the runner needs the
+# Inter-App Audio entitlement (see AUv3TestRunner.entitlements), and Xcode has to make
+# a provisioning profile with it once (README: "One-time setup for devices").
+name: AUv3TestRunner
+options:
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  AUv3TestRunner:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../Sources/AUv3TestKit
+        group: AUv3TestKit
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: auv3-test
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "1"
+        UIBackgroundModes: [audio]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    entitlements:
+      path: AUv3TestRunner.entitlements
+      properties:
+        inter-app-audio: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.sufystudios.auv3-test-runner
+        # Your team: pick it in Xcode's Signing & Capabilities, or auv3-test-ios passes
+        # DEVELOPMENT_TEAM from the environment.
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO

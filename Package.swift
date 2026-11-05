@@ -11,7 +11,7 @@ let package = Package(
     targets: [
         // Apple frameworks only (AVFoundation, AudioToolbox, AppKit/UIKit): nothing to install.
         // The checks, for macOS and iOS alike. The iOS runner app that uses them is in
-        // iOSRunner/AUv3TestRunner.swiftpm, driven by auv3-test-ios.
+        // iOSRunner/AUv3TestRunner.xcodeproj, driven by auv3-test-ios.
         .target(name: "AUv3TestKit", path: "Sources/AUv3TestKit"),
         // The Mac command line.
         .executableTarget(name: "auv3-test", dependencies: ["AUv3TestKit"], path: "Sources/auv3-test"),

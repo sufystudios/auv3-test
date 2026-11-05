@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Without it, iOS devices (not the Simulator) show a host only Apple's own Audio Units. -->
+	<key>inter-app-audio</key>
+	<true/>
+</dict>
+</plist>

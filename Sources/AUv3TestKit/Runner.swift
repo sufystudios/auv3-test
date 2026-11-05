@@ -3,7 +3,7 @@ import AVFoundation
 
 /// The whole tool, for any front end: the Mac command line (Sources/auv3-test), or the
 /// iOS runner app that runs it in the Simulator or on an iPhone or iPad
-/// (iOSRunner/AUv3TestRunner.swiftpm, driven by `auv3-test-ios`).
+/// (iOSRunner/AUv3TestRunner.xcodeproj, driven by `auv3-test-ios`).
 public enum AUv3Test {
     /// What a command line asks for.
     public enum Request {

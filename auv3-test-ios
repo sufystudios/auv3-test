@@ -10,17 +10,18 @@
 # its identifier. The options are the Mac command line's (`auv3-test --help`); --snapshot
 # and --window-size are Mac-only.
 #
-# It builds the runner app (iOSRunner/AUv3TestRunner.swiftpm), installs it, launches it
-# with your arguments and waits for its report. A real device must be unlocked, and needs
-# your Apple developer team for signing: set DEVELOPMENT_TEAM (e.g. in your shell profile),
-# or pass it as DEVELOPMENT_TEAM=ABCDE12345 ./auv3-test-ios … The plugin's app must be
-# installed on the device, and opened once so iOS registers its Audio Unit.
+# It builds the runner app (iOSRunner/AUv3TestRunner.xcodeproj), installs it, launches it
+# with your arguments and waits for its report. The plugin's app must be installed on the
+# device, and opened once so iOS registers its Audio Unit. A real device must be unlocked,
+# and the runner signed by your team: set DEVELOPMENT_TEAM (e.g. in your shell profile),
+# and AUV3_RUNNER_BUNDLE_ID to a bundle ID of your own, then do the README's one-time
+# setup for devices.
 #
 # Exit status: 0 if every check passed, 1 if one failed, 2 if the plugin couldn't be
 # tested, 3 if the runner couldn't be built, installed or launched.
 set -uo pipefail
 here=${0:A:h}
-project="$here/iOSRunner/AUv3TestRunner.swiftpm"
+project="$here/iOSRunner/AUv3TestRunner.xcodeproj"
 build="${AUV3_TEST_IOS_BUILD:-/tmp/auv3-test-ios-build}"
 bundle="${AUV3_RUNNER_BUNDLE_ID:-io.github.sufystudios.auv3-test-runner}"
 
@@ -44,11 +45,12 @@ shift
 [[ $# -gt 0 ]] || fail "say what to test: the plugin's codes (or --list) after the device"
 
 # A simulator, by name or UDID?
-sim=$(xcrun simctl list devices available | grep -E "^\s+$device \(|\($device\)" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+# Exactly: "iPad" mustn't pick the simulator "iPad (A16)".
+sim=$(xcrun simctl list devices available | grep -E "^\s+$device \([0-9A-F-]{36}\)|\($device\)" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
 if [[ -n "$sim" ]]; then
     print -u2 "… Building the runner for the simulator"
-    (cd "$project" && xcodebuild -scheme AUv3TestRunner -destination 'generic/platform=iOS Simulator' \
-        -derivedDataPath "$build" build -quiet) >&2 || fail "the runner didn't build"
+    xcodebuild -project "$project" -scheme AUv3TestRunner -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath "$build" PRODUCT_BUNDLE_IDENTIFIER="$bundle" build -quiet >&2 || fail "the runner didn't build"
     app="$build/Build/Products/Debug-iphonesimulator/AUv3TestRunner.app"
     xcrun simctl boot "$sim" 2>/dev/null
     xcrun simctl bootstatus "$sim" -b >/dev/null || fail "the simulator didn't start"
@@ -61,10 +63,16 @@ else
         | grep -oE '[0-9A-F]{8}-[0-9A-F]{16}|[0-9A-F-]{36}' | head -1)
     [[ -n "$udid" ]] || fail "no simulator or connected device called \"$device\" (try --devices)"
     [[ -n "${DEVELOPMENT_TEAM:-}" ]] || fail "set DEVELOPMENT_TEAM to your Apple developer team ID, to sign the runner for the device"
+    # The runner has the Inter-App Audio entitlement (without it, iOS shows a host on a
+    # device only Apple's own Audio Units), so it needs a profile made for its bundle ID.
+    # Xcode makes that the first time it runs the runner (README: one-time setup); after
+    # that, this finds it. -allowProvisioningUpdates is left out: without an account that
+    # xcodebuild can use, it fails even when the profile is there.
     print -u2 "… Building the runner for $device"
-    (cd "$project" && DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM xcodebuild -scheme AUv3TestRunner -destination "id=$udid" \
-        -derivedDataPath "$build" -allowProvisioningUpdates DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM build -quiet) >&2 \
-        || fail "the runner didn't build or sign (is the device trusted, and DEVELOPMENT_TEAM right?)"
+    xcodebuild -project "$project" -scheme AUv3TestRunner -destination "id=$udid" \
+        -derivedDataPath "$build" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" PRODUCT_BUNDLE_IDENTIFIER="$bundle" \
+        build -quiet >&2 \
+        || fail "the runner didn't build or sign for $device. The first time, run it once from Xcode, so Xcode makes its provisioning profile: see \"One-time setup for devices\" in the README"
     app="$build/Build/Products/Debug-iphoneos/AUv3TestRunner.app"
     xcrun devicectl device install app --device "$udid" "$app" >/dev/null 2>&1 || fail "couldn't install the runner on $device"
     print -u2 "… Testing on $device (a minute or so; keep it unlocked)"
