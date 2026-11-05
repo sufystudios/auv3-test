@@ -45,11 +45,23 @@ struct AUv3TestRunnerApp: App {
 
     static let reportStart = "=== auv3-test report ==="
     static let reportEnd = "=== end of report ==="
+    static let outPrefix = "@out/"
+    static let outMarker = "auv3-test output folder: "
 
     private func start() {
         // Only what auv3-test-ios passed: leave out anything Xcode adds when it runs the app.
-        let arguments = Array(ProcessInfo.processInfo.arguments.dropFirst()).filter { !$0.hasPrefix("-NS") && !$0.hasPrefix("-Apple") }
+        var arguments = Array(ProcessInfo.processInfo.arguments.dropFirst()).filter { !$0.hasPrefix("-NS") && !$0.hasPrefix("-Apple") }
         let scripted = !arguments.isEmpty
+        // Files the script asks for (--save-audio, --spectrogram) are named "@out/...":
+        // they go in a folder of this app's own, which the script copies back to the
+        // Mac afterwards, since the device can't write to the Mac's paths.
+        if arguments.contains(where: { $0.hasPrefix(Self.outPrefix) }) {
+            let out = URL.documentsDirectory.appendingPathComponent("out")
+            try? FileManager.default.removeItem(at: out)
+            try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+            arguments = arguments.map { $0.hasPrefix(Self.outPrefix) ? out.appendingPathComponent(String($0.dropFirst(Self.outPrefix.count))).path : $0 }
+            print("\(Self.outMarker)\(out.path)")
+        }
         // Plugins render here as in a music app, so the session plays (silently: the
         // audio goes to the checks, not the speaker).
         try? AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)

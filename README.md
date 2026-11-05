@@ -80,7 +80,8 @@ An AUv3 must be registered before macOS can see it: open its containing app once
 ```
 
 - The options are the same as on the Mac, except `--window-size`: the plugin's view fills the screen, as in GarageBand or AUM. The exit codes are the same too, plus `3` if the runner couldn't be built, installed or launched.
-- `--snapshot <png>` saves a capture of the device's screen with the plugin's view on it, here on the Mac (for store screenshots of the plugin on iPhone and iPad). The view is shown full screen throughout the run, as a host would.
+- `--save-audio <dir>` and `--spectrogram <png>` are written on the device and copied back to those paths on the Mac.
+- `--snapshot <png>` saves a capture of the device's screen with the plugin's view on it, here on the Mac (for store screenshots of the plugin on iPhone and iPad). The view is shown full screen throughout the run, as a host would, so leave the device alone while it runs: a touch on the plugin's own keyboard plays into the test.
 - Install the plugin's app on the device or simulator, and open it once so iOS registers its Audio Unit.
 - A real device must be unlocked, trusted and in Developer Mode. A device and a simulator with the same name: pass the device's identifier from `--devices`.
 - Run with no arguments (tapping its icon, or from Xcode), the runner lists the plugins it can see.
@@ -152,7 +153,7 @@ Every step reports its level, and warns or fails on:
 
 It also measures, without judging: how long after the note-on the sound began, and how long a release takes to fade by 60 dB. In the JSON they're in each step's `measurements` (`onsetSeconds`, `decaySeconds`, `pitchHz`, `centsOff`, `zipperRatio`, `clickRatio`…).
 
-`--spectrogram <png>` draws the whole scenario: time across, frequency up (log, 30 Hz to 20 kHz), with numbered lines where steps start. It's for looking at what the numbers describe: a click is a thin vertical line, zipper noise a sweep drawn as stairs, aliasing lines folding back down, a cut a sudden dark edge. With `--save-audio <dir>`, the scenario is saved as one WAV. On iOS, `--spectrogram` and `--save-audio` are Mac-only for now.
+`--spectrogram <png>` draws the whole scenario: time across, frequency up (log, 30 Hz to 20 kHz), with numbered lines where steps start. It's for looking at what the numbers describe: a click is a thin vertical line, zipper noise a sweep drawn as stairs, aliasing lines folding back down, a cut a sudden dark edge. With `--save-audio <dir>`, the scenario is saved as one WAV. On iOS they work the same: the files are written on the device and copied back to the paths you give, on the Mac.
 
 Measurements find defects; they can't tell you whether a plugin *sounds good*. That's still for ears: the WAVs let you A/B a scenario before and after a change.
 

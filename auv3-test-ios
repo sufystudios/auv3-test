@@ -50,6 +50,8 @@ shift
 # screen shows it), and this captures the device's screen from here.
 args=()
 snapshot=""
+audio_dir=""
+spectrogram=""
 while [[ $# -gt 0 ]]; do
     if [[ "$1" == "--snapshot" && $# -gt 1 ]]; then
         snapshot=${2:A}
@@ -60,8 +62,16 @@ while [[ $# -gt 0 ]]; do
         [[ -r "$2" ]] || fail "couldn't read the scenario file $2"
         args+=(--scenario-json "$(<"$2")")
         shift 2
-    elif [[ "$1" == "--spectrogram" || "$1" == "--save-audio" ]]; then
-        fail "$1 is Mac-only for now: run the scenario with auv3-test on the Mac to get the picture or the audio"
+    elif [[ "$1" == "--save-audio" && $# -gt 1 ]]; then
+        # Files are written on the device, in the runner's own folder ("@out/"), and
+        # copied back here afterwards (see fetch_output).
+        audio_dir=${2:A}
+        args+=(--save-audio @out/audio)
+        shift 2
+    elif [[ "$1" == "--spectrogram" && $# -gt 1 ]]; then
+        spectrogram=${2:A}
+        args+=(--spectrogram @out/spectrogram.png)
+        shift 2
     else
         args+=("$1")
         shift
@@ -88,20 +98,53 @@ launch() {
     rm -f "$log"
 }
 
+# Copies what the runner wrote on the device (--save-audio, --spectrogram) to where they
+# were asked for here, and points the report at them. $copy_out is the command that
+# copies the runner's output folder into the folder it's given.
+fetch_output() {
+    [[ -n "$audio_dir$spectrogram" ]] || return 0
+    local remote=$(print -r -- "$output" | sed -n 's/.*auv3-test output folder: \(.*\)$/\1/p' | tr -d '\r' | tail -1)
+    local here=$(mktemp -d -t auv3-test-ios-out)
+    if ! "${copy_out[@]}" "$here" >/dev/null 2>&1; then
+        print -u2 "auv3-test-ios: couldn't copy the audio or spectrogram back from the device"
+        return 0
+    fi
+    # Some copies keep the folder's name; look inside it if so.
+    [[ -d "$here/out" ]] && here="$here/out"
+    if [[ -n "$audio_dir" && -d "$here/audio" ]]; then
+        mkdir -p "$audio_dir" && cp "$here"/audio/* "$audio_dir"/ 2>/dev/null
+        # (The pattern in a variable: a "/" written inside ${…//…/…} would end it.)
+        local from="$remote/audio"
+        [[ -n "$remote" ]] && output=${output//$from/$audio_dir}
+    fi
+    if [[ -n "$spectrogram" && -f "$here/spectrogram.png" ]]; then
+        cp "$here/spectrogram.png" "$spectrogram"
+        local from="$remote/spectrogram.png"
+        [[ -n "$remote" ]] && output=${output//$from/$spectrogram}
+    fi
+}
+
 # A simulator, by name or UDID?
 # Exactly: "iPad" mustn't pick the simulator "iPad (A16)".
 sim=$(xcrun simctl list devices available | grep -E "^\s+$device \([0-9A-F-]{36}\)|\($device\)" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
 if [[ -n "$sim" ]]; then
     print -u2 "… Building the runner for the simulator"
+    # A build folder per kind of destination: switching one between them confuses signing.
     xcodebuild -project "$project" -scheme AUv3TestRunner -destination 'generic/platform=iOS Simulator' \
-        -derivedDataPath "$build" PRODUCT_BUNDLE_IDENTIFIER="$bundle" build -quiet >&2 || fail "the runner didn't build"
-    app="$build/Build/Products/Debug-iphonesimulator/AUv3TestRunner.app"
+        -derivedDataPath "$build/simulator" PRODUCT_BUNDLE_IDENTIFIER="$bundle" build -quiet >&2 || fail "the runner didn't build"
+    app="$build/simulator/Build/Products/Debug-iphonesimulator/AUv3TestRunner.app"
     xcrun simctl boot "$sim" 2>/dev/null
     xcrun simctl bootstatus "$sim" -b >/dev/null || fail "the simulator didn't start"
     xcrun simctl install "$sim" "$app" || fail "couldn't install the runner in the simulator"
     print -u2 "… Testing (a minute or so)"
     capture=(xcrun simctl io "$sim" screenshot)
     launch xcrun simctl launch --console-pty --terminate-running-process "$sim" "$bundle" "$@"
+    copy_out_from_simulator() {
+        local container=$(xcrun simctl get_app_container "$sim" "$bundle" data) || return 1
+        cp -R "$container/Documents/out/." "$1"/
+    }
+    copy_out=(copy_out_from_simulator)
+    fetch_output
 else
     # A connected device, by name or identifier.
     udid=$(xcrun devicectl list devices 2>/dev/null | awk -v d="$device" 'NR > 2 && /physical/ && (index($0, d" ") == 1 || index($0, d))' \
@@ -115,10 +158,10 @@ else
     # xcodebuild can use, it fails even when the profile is there.
     print -u2 "… Building the runner for $device"
     xcodebuild -project "$project" -scheme AUv3TestRunner -destination "id=$udid" \
-        -derivedDataPath "$build" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" PRODUCT_BUNDLE_IDENTIFIER="$bundle" \
+        -derivedDataPath "$build/device" DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" PRODUCT_BUNDLE_IDENTIFIER="$bundle" \
         build -quiet >&2 \
         || fail "the runner didn't build or sign for $device. The first time, run it once from Xcode, so Xcode makes its provisioning profile: see \"One-time setup for devices\" in the README"
-    app="$build/Build/Products/Debug-iphoneos/AUv3TestRunner.app"
+    app="$build/device/Build/Products/Debug-iphoneos/AUv3TestRunner.app"
     xcrun devicectl device install app --device "$udid" "$app" >/dev/null 2>&1 || fail "couldn't install the runner on $device"
     print -u2 "… Testing on $device (a minute or so; keep it unlocked)"
     capture=(xcrun devicectl device capture screenshot --device "$udid" --destination)
@@ -126,6 +169,9 @@ else
     if [[ "$output" == *"could not be, unlocked"* ]]; then
         fail "$device is locked: unlock it and try again"
     fi
+    copy_out=(xcrun devicectl device copy from --device "$udid" --domain-type appDataContainer
+              --domain-identifier "$bundle" --source Documents/out --destination)
+    fetch_output
 fi
 
 # The report sits between the runner's markers; everything else is the system's noise.
