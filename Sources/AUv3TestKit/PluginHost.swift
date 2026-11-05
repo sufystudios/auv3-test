@@ -392,20 +392,44 @@ final class PluginHost: @unchecked Sendable {
         return BlockResult(status: status, duration: duration, peak: peak, nonFinite: nonFinite, edge: edge)
     }
 
-    /// An effect's input: a quiet 220 Hz tone with a little noise.
+    /// What an effect is fed.
+    enum InputSignal {
+        /// A quiet 220 Hz tone with a little noise (the default).
+        case tone
+        /// Silence, but for a single sample at 0.5 at the start of the next block that
+        /// pulls input (see `impulsePending`): for latency and tails.
+        case impulse
+    }
+    var inputSignal: InputSignal = .tone
+    /// With `.impulse`: the next block's input starts with the impulse.
+    var impulsePending = false
+    /// Where an effect's input goes as well, when a check compares output with it.
+    var inputRecorder: SampleRecorder?
+
+    /// An effect's input, as `inputSignal` says.
     private func fillInput(_ list: UnsafeMutablePointer<AudioBufferList>, frames: AUAudioFrameCount) {
         input.frameLength = frames
         let source = UnsafeMutableAudioBufferListPointer(input.mutableAudioBufferList)
         let increment = 2 * Double.pi * 220 / sampleRate
         if let left = source[0].mData?.assumingMemoryBound(to: Float.self) {
-            for i in 0..<Int(frames) {
-                left[i] = Float(0.25 * sin(inputPhase + Double(i) * increment)) + Float.random(in: -0.01...0.01)
+            switch inputSignal {
+            case .tone:
+                for i in 0..<Int(frames) {
+                    left[i] = Float(0.25 * sin(inputPhase + Double(i) * increment)) + Float.random(in: -0.01...0.01)
+                }
+            case .impulse:
+                for i in 0..<Int(frames) { left[i] = 0 }
+                if impulsePending {
+                    left[0] = 0.5
+                    impulsePending = false
+                }
             }
         }
         inputPhase += Double(frames) * increment
         if source.count > 1, let left = source[0].mData, let right = source[1].mData {
             memcpy(right, left, Int(frames) * MemoryLayout<Float>.size)
         }
+        inputRecorder?.append(input)
         // Point the plugin's input buffers at ours where it left them empty.
         let destination = UnsafeMutableAudioBufferListPointer(list)
         for (i, buffer) in destination.enumerated() where i < source.count {

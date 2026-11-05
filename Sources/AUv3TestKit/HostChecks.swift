@@ -123,6 +123,119 @@ extension TestRun {
             measurements: m))
     }
 
+    // MARK: Effects: bypass, latency, tail
+
+    /// A host's bypass button sets shouldBypassEffect: the effect's input should then
+    /// come out as it went in (delayed by its reported latency at most), and switching
+    /// shouldn't click.
+    func checkBypass() {
+        guard host.isEffect else { return }
+        log("Bypassing it")
+        let unit = host.audioUnit
+        let host = self.host
+        let reportedLag = Int((unit.latency * host.sampleRate).rounded())
+        // Switching on, halfway through: listen for a click there.
+        let switchBlock = Int(0.5 / host.blockDuration)
+        let (switching, _) = capture(seconds: 1) { index in if index == switchBlock { unit.shouldBypassEffect = true } }
+        let inputs = SampleRecorder(frames: Int(1.5 * host.sampleRate) + 8_192)
+        host.inputRecorder = inputs
+        let (bypassed, _) = capture(seconds: 1)
+        host.inputRecorder = nil
+        unit.shouldBypassEffect = false
+        _ = render(seconds: 0.2)
+
+        // How far the bypassed output is from the input, at no delay and at the reported one.
+        let input = inputs.mono().samples
+        func error(lag: Int) -> Double {
+            let n = min(bypassed.count, input.count) - lag - 2_048
+            guard n > 4_096 else { return 0 }
+            var diff: Float = 0, signal: Float = 0
+            for i in 2_048..<(2_048 + n) {
+                let d = bypassed[i + lag] - input[i]
+                diff += d * d
+                signal += input[i] * input[i]
+            }
+            return signal > 0 ? 10 * log10(Double(max(diff, 1e-20) / signal)) : 0
+        }
+        let best = Set([0, reportedLag]).map { (lag: $0, db: error(lag: $0)) }.min { $0.db < $1.db }!
+        let window = SoundAnalysis.clickWindow
+        let ratios = SoundAnalysis.clickRatios(SoundAnalysis.windowMaxima(switching))
+        let switchWindow = switchBlock * Int(options.blockSize) / window
+        let click = ratios.indices.filter { abs($0 - switchWindow) <= 1 }.map { ratios[$0] }.max() ?? 1
+
+        var problems: [String] = []
+        if best.db > -30 {
+            problems.append("Bypassed, its output isn't its input: they differ by \(String(format: "%.0f", best.db)) dB (at no delay\(reportedLag > 0 ? ", or the reported \(reportedLag) samples" : "")).")
+        }
+        if click > 4 {
+            problems.append("Switching bypass on clicks: an edge \(Int(click))× sharper than the sound around it.")
+        }
+        checks.append(CheckResult(
+            id: "bypass", title: "Bypass passes the input through, without a click",
+            status: problems.isEmpty ? .passed : .warning,
+            detail: problems.isEmpty
+                ? "Bypassed, its output matched its input to \(String(format: "%.0f", best.db)) dB\(best.lag > 0 ? ", \(best.lag) samples late, as its latency says" : ""); switching was clean."
+                : problems.joined(separator: " "),
+            hint: problems.isEmpty ? nil : "Implement shouldBypassEffect: while it's true, copy the input to the output (delayed by your reported latency, if you keep it constant), and crossfade over a few milliseconds when it changes.",
+            measurements: ["bypassErrorDb": (best.db * 10).rounded() / 10, "switchClickRatio": (click * 10).rounded() / 10]))
+    }
+
+    /// Hosts delay every other track by an effect's reported latency, so they line up,
+    /// and stop rendering it its reported tail time after the input ends. Wrong numbers
+    /// put the track out of time, or cut its reverb or echoes off at the end.
+    func checkLatencyAndTail() {
+        guard host.isEffect else { return }
+        log("Sending an impulse through it")
+        let unit = host.audioUnit
+        let host = self.host
+        host.inputSignal = .impulse
+        _ = render(seconds: 0.3)  // Let the test tone die away first.
+        let atBlock = 2
+        let maxSeconds = 8.0
+        let (out, _) = capture(seconds: maxSeconds) { index in if index == atBlock { host.impulsePending = true } }
+        host.inputSignal = .tone
+        _ = render(seconds: 0.2)
+        let impulse = atBlock * Int(options.blockSize)
+        let rate = host.sampleRate
+
+        var m: [String: Double] = ["reportedLatencyMs": unit.latency * 1000, "reportedTailSeconds": unit.tailTime]
+        var problems: [String] = []
+        var detail: [String] = []
+        let after = out.dropFirst(impulse)
+        let peak = SoundAnalysis.peak(after)
+        guard peak > 1e-4 else {
+            checks.append(CheckResult(id: "latency-tail", title: "Reports its latency and tail truthfully", status: .passed,
+                detail: "An impulse produced no output to measure (fine for a gate or a fully dry setting).", hint: nil, measurements: m))
+            return
+        }
+        // Latency: a strong first arrival (a dry or direct path) is where the input
+        // comes out; a reverb or echo with no direct sound tells nothing about it.
+        if let first = after.firstIndex(where: { abs($0) > 0.1 }) {
+            let lag = first - after.startIndex
+            let reported = Int((unit.latency * rate).rounded())
+            m["measuredLatencyMs"] = (Double(lag) / rate * 10_000).rounded() / 10
+            detail.append("The impulse came out after \(lag) samples (it reports \(reported)).")
+            if abs(lag - reported) > 32 && lag < Int(0.05 * rate) {
+                problems.append("It reports \(reported) samples of latency but its output arrives after \(lag): hosts will \(lag > reported ? "play this track late" : "pull this track early") by \(String(format: "%.1f", Double(abs(lag - reported)) / rate * 1000)) ms.")
+            }
+        }
+        // Tail: how long until it's 60 dB below its peak and stays there.
+        let threshold = peak * 0.001
+        let last = after.lastIndex(where: { abs($0) > threshold }) ?? after.startIndex
+        let ring = Double(last - after.startIndex) / rate
+        m["measuredTailSeconds"] = (ring * 100).rounded() / 100
+        detail.append("It rang for \(String(format: "%.2f", ring)) s (it reports a tail of \(String(format: "%.2f", unit.tailTime)) s).")
+        if ring > unit.tailTime + 0.25 && unit.tailTime < 1e6 {
+            problems.append("Its tail lasts \(String(format: "%.2f", ring)) s\(ring >= maxSeconds - 0.5 ? " or more" : ""), but it reports \(String(format: "%.2f", unit.tailTime)) s: a host that stops rendering it after the input ends cuts the tail off, in a bounce or at the end of a region.")
+        }
+        checks.append(CheckResult(
+            id: "latency-tail", title: "Reports its latency and tail truthfully",
+            status: problems.isEmpty ? .passed : .warning,
+            detail: (detail + problems).joined(separator: " "),
+            hint: problems.isEmpty ? nil : "Override AUAudioUnit's latency (seconds of delay the processing adds) and tailTime (how long output continues after input stops, at the longest settings), and keep them up to date when parameters change them.",
+            measurements: m))
+    }
+
     // MARK: Sample rates
 
     static let testRates: [Double] = [44_100, 48_000, 96_000]
