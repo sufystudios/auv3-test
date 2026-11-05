@@ -7,7 +7,7 @@ final class TestRun: @unchecked Sendable {
     let host: PluginHost
     let options: Options
     var checks: [CheckResult] = []  // Scenario.swift adds its steps too.
-    private let log: (String) -> Void
+    let log: (String) -> Void
 
     /// A plain render error, a non-finite sample, a silent instrument: anything the
     /// phases notice, kept so later checks can compare (did sound come back?).
@@ -37,6 +37,7 @@ final class TestRun: @unchecked Sendable {
         checkClicks()
         checkParameterReadBack()
         checkStateRestore()
+        checkSampleRates()
     }
 
     // MARK: Rendering phases

@@ -111,6 +111,17 @@ enum SoundAnalysis {
         return sampleRate / period
     }
 
+    /// A held note's pitch: three readings across the second half, clear of the onset,
+    /// that agree within 30 cents; their median. Nil when there isn't a steady one.
+    static func steadyPitch(_ x: ArraySlice<Float>, sampleRate: Double) -> Double? {
+        let readings = [0.5, 0.65, 0.8].compactMap { fraction -> Double? in
+            let start = x.index(x.startIndex, offsetBy: Int(Double(x.count) * fraction))
+            return pitch(x[start..<min(start + 6_000, x.endIndex)], sampleRate: sampleRate)
+        }.sorted()
+        guard readings.count == 3, 1200 * log2(readings[2] / readings[0]) < 30 else { return nil }
+        return readings[1]
+    }
+
     static func noteFrequency(_ note: Int) -> Double { 440 * pow(2, Double(note - 69) / 12) }
 
     /// How far `frequency` is from `note`, in cents, folded to the nearest octave (a

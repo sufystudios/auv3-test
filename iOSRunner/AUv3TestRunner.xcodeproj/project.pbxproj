@@ -19,6 +19,7 @@
 		B39E0159D963DFABC23FD3AC /* SoundAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 381C70C7A09C4D140FEBBCA3 /* SoundAnalysis.swift */; };
 		C250392A928CA304944C65B5 /* Options.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0986E496EDDBEF3435037D /* Options.swift */; };
 		CEC84C9DB5210E1A6CC7C56D /* Report.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0168AEF90F17F7B0724790 /* Report.swift */; };
+		D1E253C491B0844AA4FA6CAB /* HostChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984F0A7FB28C6B0EA25688A6 /* HostChecks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 		6D0986E496EDDBEF3435037D /* Options.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Options.swift; sourceTree = "<group>"; };
 		8C2A1F160F62AADDBAE16BE6 /* Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capture.swift; sourceTree = "<group>"; };
 		91ABE17A1A31D30D380CC4D2 /* LiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSession.swift; sourceTree = "<group>"; };
+		984F0A7FB28C6B0EA25688A6 /* HostChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostChecks.swift; sourceTree = "<group>"; };
 		98E13D44B8B2EE0E7B9794AD /* Spectrogram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spectrogram.swift; sourceTree = "<group>"; };
 		ACF50A21566D936BC46E2C5D /* ClickDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickDetection.swift; sourceTree = "<group>"; };
 		AD0168AEF90F17F7B0724790 /* Report.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Report.swift; sourceTree = "<group>"; };
@@ -61,6 +63,7 @@
 				8C2A1F160F62AADDBAE16BE6 /* Capture.swift */,
 				64FFBACBFDEBD8BDD8799D17 /* Checks.swift */,
 				ACF50A21566D936BC46E2C5D /* ClickDetection.swift */,
+				984F0A7FB28C6B0EA25688A6 /* HostChecks.swift */,
 				91ABE17A1A31D30D380CC4D2 /* LiveSession.swift */,
 				6D0986E496EDDBEF3435037D /* Options.swift */,
 				6A1BF68FE3FE321ECCE6BAFE /* PluginHost.swift */,
@@ -153,6 +156,7 @@
 				01B0E3EBE2B8E5E54B0086D5 /* Capture.swift in Sources */,
 				87A2BC36F68F0F2F3A33FFD3 /* Checks.swift in Sources */,
 				76A32CFCE5E82A4E8954DE87 /* ClickDetection.swift in Sources */,
+				D1E253C491B0844AA4FA6CAB /* HostChecks.swift in Sources */,
 				384F8A16E35A3EFA5D327DFF /* LiveSession.swift in Sources */,
 				C250392A928CA304944C65B5 /* Options.swift in Sources */,
 				4F7134C2A3F53B841D1BDB5C /* PluginHost.swift in Sources */,

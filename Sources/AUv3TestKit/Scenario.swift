@@ -401,14 +401,7 @@ extension TestRun {
         // Pitch, for a single note.
         var heard = ""
         if case .play(let notes, _) = step.action, notes.count == 1, samples.count > Int(0.4 * rate) {
-            // Three windows across the second half, clear of the onset: a pitch only
-            // counts when they agree (within 30 cents), and it's their median.
-            let readings = [0.5, 0.65, 0.8].compactMap { fraction -> Double? in
-                let start = samples.index(samples.startIndex, offsetBy: Int(Double(samples.count) * fraction))
-                return SoundAnalysis.pitch(samples[start..<min(start + 6_000, samples.endIndex)], sampleRate: rate)
-            }.sorted()
-            let steady = readings.count == 3 && 1200 * log2(readings[2] / readings[0]) < 30
-            if steady, let frequency = Optional(readings[1]) {
+            if let frequency = SoundAnalysis.steadyPitch(samples, sampleRate: rate) {
                 let (cents, octaves) = SoundAnalysis.tuning(of: frequency, note: Int(notes[0]))
                 m["pitchHz"] = (frequency * 10).rounded() / 10
                 m["centsOff"] = (cents * 10).rounded() / 10

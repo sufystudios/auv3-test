@@ -33,7 +33,9 @@ final class PluginHost: @unchecked Sendable {
     let options: Options
     let component: AVAudioUnitComponent
     let audioUnit: AUAudioUnit
-    let format: AVAudioFormat
+    private(set) var format: AVAudioFormat
+    /// The rate the plugin renders at now: the options' rate, unless reconfigure(sampleRate:) changed it.
+    private(set) var sampleRate: Double
     let isInstrument: Bool
     let isEffect: Bool
     /// An app-extension AUv3, loaded in its own process; otherwise an AUv2 in ours.
@@ -87,11 +89,30 @@ final class PluginHost: @unchecked Sendable {
             throw HostError.renderSetup("couldn't make a \(options.sampleRate) Hz stereo format")
         }
         self.format = format
+        self.sampleRate = options.sampleRate
         self.output = output
         self.input = input
     }
 
     // MARK: Setting up, as a host does before playback
+
+    /// Changes the rate the plugin renders at, as a host does when its project's rate
+    /// changes: render resources released, every bus given the new format, resources
+    /// allocated again.
+    func reconfigure(sampleRate rate: Double) throws {
+        audioUnit.deallocateRenderResources()
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2),
+              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: options.blockSize),
+              let input = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: options.blockSize) else {
+            throw HostError.renderSetup("couldn't make a \(rate) Hz stereo format")
+        }
+        self.format = format
+        self.output = output
+        self.input = input
+        sampleRate = rate
+        edgeMeters = []
+        try prepare()
+    }
 
     func prepare() throws {
         let unit = audioUnit
@@ -107,14 +128,14 @@ final class PluginHost: @unchecked Sendable {
                 unit.inputBusses[0].isEnabled = true
             }
         } catch {
-            throw HostError.renderSetup("the plugin refused a \(Int(options.sampleRate)) Hz stereo format: \(error)")
+            throw HostError.renderSetup("the plugin refused a \(Int(sampleRate)) Hz stereo format: \(error)")
         }
         unit.maximumFramesToRender = max(options.blockSize, 1024)
 
         // Tempo and transport, which plugins read from their render thread. Hosts set
         // these before allocating render resources; some plugins only look them up then.
         let tempo = self.tempo
-        let sampleRate = options.sampleRate
+        let sampleRate = self.sampleRate
         unit.musicalContextBlock = { [weak self] currentTempo, numerator, denominator, beatPosition, sampleOffsetToNextBeat, downbeat in
             let beat = (self?.sampleTime ?? 0) / sampleRate * tempo / 60
             currentTempo?.pointee = tempo
@@ -308,7 +329,7 @@ final class PluginHost: @unchecked Sendable {
     /// Where a scenario keeps every sample, to measure afterwards.
     var recorder: SampleRecorder?
 
-    var blockDuration: Double { Double(options.blockSize) / options.sampleRate }
+    var blockDuration: Double { Double(options.blockSize) / sampleRate }
 
     /// The block `renderBlock` just made, until the next call: a live session plays it.
     var renderedOutput: AVAudioPCMBuffer { output }
@@ -375,7 +396,7 @@ final class PluginHost: @unchecked Sendable {
     private func fillInput(_ list: UnsafeMutablePointer<AudioBufferList>, frames: AUAudioFrameCount) {
         input.frameLength = frames
         let source = UnsafeMutableAudioBufferListPointer(input.mutableAudioBufferList)
-        let increment = 2 * Double.pi * 220 / options.sampleRate
+        let increment = 2 * Double.pi * 220 / sampleRate
         if let left = source[0].mData?.assumingMemoryBound(to: Float.self) {
             for i in 0..<Int(frames) {
                 left[i] = Float(0.25 * sin(inputPhase + Double(i) * increment)) + Float.random(in: -0.01...0.01)
