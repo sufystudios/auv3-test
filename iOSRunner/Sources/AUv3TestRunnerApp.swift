@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UIKit
 
 /// auv3-test on an iPhone or iPad: tests an AUv3 installed on the device, the way
 /// GarageBand or AUM loads it, and shows the report. The checks (Sources/AUv3TestKit)
@@ -72,23 +73,41 @@ struct AUv3TestRunnerApp: App {
             finish(scripted ? text : "Installed Audio Units:\n\n" + text, code: code, quit: scripted)
         case .run(let run):
             output = "Testing… (this takes a minute or so)"
+            // No auto-lock mid-run: locked, the app goes to the background, and once the
+            // plugin stops playing iOS suspends it before it can report.
+            UIApplication.shared.isIdleTimerDisabled = true
+            // And should it go to the background anyway (a swipe home), time to finish.
+            let task = UIApplication.shared.beginBackgroundTask(withName: "auv3-test run")
             // Off the main thread: the plugin's view and main-thread work need it free.
             Thread {
                 let report = run.perform()
+                // Printed from here, not the main thread, which may not be running if
+                // the app is in the background.
+                Self.printReport(run.wantsJSON ? report.json : report.text, code: report.exitCode)
                 DispatchQueue.main.async {
-                    finish(run.wantsJSON ? report.json : report.text, code: report.exitCode, quit: true)
+                    output = run.wantsJSON ? report.json : report.text
+                    UIApplication.shared.isIdleTimerDisabled = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(report.exitCode) }
                 }
+                // If the main thread doesn't come round (suspended), quit from here.
+                Thread.sleep(forTimeInterval: 2)
+                UIApplication.shared.endBackgroundTask(task)
+                exit(report.exitCode)
             }.start()
         }
     }
 
-    private func finish(_ text: String, code: Int32, quit: Bool) {
-        output = text
-        print(Self.reportStart)
+    private static func printReport(_ text: String, code: Int32) {
+        print(reportStart)
         print(text)
-        print(Self.reportEnd)
+        print(reportEnd)
         print("auv3-test exit code: \(code)")
         fflush(stdout)
+    }
+
+    private func finish(_ text: String, code: Int32, quit: Bool) {
+        output = text
+        Self.printReport(text, code: code)
         // Left open when opened by hand, to read; quits for the script, which waits for it.
         if quit {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(code) }

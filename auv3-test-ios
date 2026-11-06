@@ -123,7 +123,7 @@ fetch_output() {
     # Some copies keep the folder's name; look inside it if so.
     [[ -d "$here/out" ]] && here="$here/out"
     if [[ -n "$audio_dir" && -d "$here/audio" ]]; then
-        mkdir -p "$audio_dir" && cp "$here"/audio/* "$audio_dir"/ 2>/dev/null
+        mkdir -p "$audio_dir" && cp "$here"/audio/*(N) "$audio_dir"/ 2>/dev/null
         # (The pattern in a variable: a "/" written inside ${…//…/…} would end it.)
         local from="$remote/audio"
         [[ -n "$remote" ]] && output=${output//$from/$audio_dir}

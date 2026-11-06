@@ -292,7 +292,7 @@ final class PluginHost: @unchecked Sendable {
                         ?? scenes.first?.windows.first?.rootViewController else {
                         return  // No app window (unit tests): the loaded view is what counts.
                     }
-                    let container = UIViewController()
+                    let container = PluginContainerController()
                     container.view.backgroundColor = .black
                     container.modalPresentationStyle = .fullScreen
                     container.addChild(controller)
@@ -508,3 +508,13 @@ final class PluginHost: @unchecked Sendable {
         audioUnit.deallocateRenderResources()
     }
 }
+
+#if !os(macOS)
+/// Holds the plugin's view (and the keyboard, in --play) full screen. Swipes up from the
+/// bottom edge need a second swipe, as in a game: playing the lowest keys or the
+/// plugin's bottom controls mustn't send the app home mid-test.
+final class PluginContainerController: UIViewController {
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .bottom }
+    override var prefersHomeIndicatorAutoHidden: Bool { true }
+}
+#endif
