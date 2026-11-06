@@ -232,7 +232,7 @@ final class LiveSession: @unchecked Sendable {
         checks.append(CheckResult(
             id: "live", title: "Plays live without a problem",
             status: timeline.isEmpty ? .passed : (timeline.contains { $0.text.hasPrefix("NaN") || $0.text.hasPrefix("render failed") || $0.text.hasPrefix("dropout") } ? .failed : .warning),
-            detail: summary + (timeline.isEmpty ? " Nothing went wrong." : "\n    " + shown.joined(separator: "\n    ") + (timeline.count > 30 ? "\n    … and \(timeline.count - 30) more." : "")),
+            detail: summary + (timeline.isEmpty ? (SoundAnalysis.peak(mono[...]) < 1e-5 ? " It was silent the whole time: nothing was played, so there was nothing to check. Play the keyboard under the plugin (or its own) next time." : " Nothing went wrong.") : "\n    " + shown.joined(separator: "\n    ") + (timeline.count > 30 ? "\n    … and \(timeline.count - 30) more." : "")),
             hint: timeline.isEmpty ? nil : "Each line is when it happened and what was being moved or played then. Replay that moment with --save-audio, or turn it into a scenario (README) to test it every time. Clicks while a control moves: glide its value over 5-30 ms. Dropouts: the render thread waited on something.",
             measurements: ["seconds": length, "notes": Double(notes.count), "moves": Double(moves.count),
                            "problems": Double(timeline.count), "lateBlocks": Double(late),
