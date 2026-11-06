@@ -4,7 +4,7 @@ A command-line host that tests an Audio Unit v3 plugin on macOS (and on an iPhon
 
 ```
 $ auv3-test aumu Dron Sufy
-auv3-test 0.4.0
+auv3-test 0.5.0
 Plugin:  DroneSynth by Sufy Studios  [aumu Dron Sufy]  version 1.6.0
          AUv3, 81 parameters, has its own window
 
@@ -109,8 +109,15 @@ After that, `auv3-test-ios` signs the runner with the same profile. Leave the pr
 | `clicks` | changes parameters without clicking: each smoothly variable parameter in turn jumps between a quarter and three quarters of its range while a chord holds, as stepped automation does | (a warning) a jump makes an edge in the waveform at least 4× sharper than anything the steady sound has at either value |
 | `parameter-readback` | reads back a parameter after it's set: straight away for an AUv2, as hosts and auval do, or within 300 ms for an out-of-process AUv3, whose values reach the host asynchronously | (a warning) a value doesn't read back |
 | `state` | restores every parameter from a saved `fullState` after they've been scrambled | any parameter doesn't come back |
+| `factory-presets` | loads each factory preset, then plays it (skipped if it has none) | a preset breaks rendering; (a warning) one is silent, takes over 0.5 s to load, or doesn't read back as `currentPreset` |
+| `bypass` | (effects) passes its input through when `shouldBypassEffect` is on, and switches without a click | (a warning) the output differs from the input by more than -30 dB, at no delay or the reported latency; switching clicks |
+| `latency-tail` | (effects) reports its `latency` and `tailTime` truthfully: an impulse goes in and is timed coming out | (a warning) a strong direct arrival is more than 32 samples from the reported latency (hosts misalign the track); it rings longer than the reported tail (hosts cut it off) |
+| `two-instances` | runs as two independent instances, rendered side by side as a host's graph does | a note played on the second sounds in the first; the second's parameters change the first's values, level or pitch |
+| `sample-rates` | plays the same at 44.1, 48 and 96 kHz, changed under the loaded plugin as a DAW does | its pitch depends on the rate, or it's silent at one; (a warning) it refuses a rate, or A3 is more than 25 cents off at every rate |
 
 Each failure or warning comes with a hint: the usual cause and fix.
+
+The last five are what goes wrong between a plugin and a session rather than inside the plugin: they're the bugs users report as "it's out of tune on my iPad", "the second track copies the first", "the reverb gets cut off when I bounce", "the track's out of time with the drums".
 
 **What the standard checks don't hear.** They catch silence, NaN and infinite samples, extreme levels and clicks (a sudden step in the waveform, like a gain applied in one sample). For zipper noise, tuning, tails and the rest, write a scenario (below).
 
@@ -179,6 +186,10 @@ Then you get a timeline, with what you were doing at each moment:
 It catches what people do that scripts don't think of: twisting two knobs at once, playing during a preset change, holding notes through a delay-time sweep. Each line says when, so you can find the moment in the WAV, and what was moving, so you can write a scenario that does the same thing every time. With `--spectrogram`, the timeline's problems are numbered lines on the picture.
 
 Rendering happens on a dedicated `.userInteractive` thread, paced in real time, calling the plugin's `renderBlock` directly as a host's audio thread does. The host supplies a 120 BPM 4/4 `musicalContextBlock` and a playing `transportStateBlock`, and schedules MIDI and automation from the render thread with `scheduleMIDIEventBlock` and `scheduleParameterBlock`. The plugin's window stays open throughout, because many render-thread bugs only appear while the UI is alive.
+
+## In CI
+
+[`Examples/github-actions.yml`](Examples/github-actions.yml) builds your plugin's Mac app on a GitHub Actions macOS runner, registers its Audio Unit, runs the checks (and, if you like, your scenarios) and fails the job when one fails, keeping the report as an artifact. Runners have no audio device or screen session for the plugin's window, so it uses `--no-ui --fast`: correctness checks (parameters, state, presets, sample rates, instances, bypass, latency) mean as much there as anywhere; timing ones less, so run those on a real Mac too. Exit codes make it scriptable anywhere else: `0` passed, `1` a check failed, `2` the plugin couldn't be tested.
 
 ## Development
 

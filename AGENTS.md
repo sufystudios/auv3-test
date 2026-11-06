@@ -27,7 +27,7 @@ This is the most common way to waste a session:
 ```json
 {
   "tool": "auv3-test",
-  "toolVersion": "0.4.0",
+  "toolVersion": "0.5.0",
   "plugin": { "name": "…", "manufacturer": "…", "codes": "aumu Dron Sufy", "version": "1.6.0",
               "isAUv3": true, "hasCustomView": true, "parameterCount": 81 },
   "settings": { "sampleRate": "48000 Hz", "blockSize": "512 frames", "…": "…" },
@@ -46,7 +46,7 @@ This is the most common way to waste a session:
 ```
 
 - `setupError` is set (exit code 2) when the plugin couldn't be found or loaded; `checks` is empty then.
-- `id` values are stable: `parameters`, `window`, `plays`, `render-thread-automation`, `sound-after-automation`, `host-thread-automation`, `clicks`, `parameter-readback`, `state`. Match on them, not on titles.
+- `id` values are stable: `parameters`, `window`, `plays`, `render-thread-automation`, `sound-after-automation`, `host-thread-automation`, `clicks`, `parameter-readback`, `state`, `factory-presets`, `bypass`, `latency-tail`, `two-instances`, `sample-rates`; in a scenario, `step-1`, `step-2`…; with `--play`, `live`. Match on them, not on titles.
 - `hint` is present on every check but only means something when the check didn't pass.
 - `measurements` is for comparing runs. `worstRenderMs` against `blockMs` tells you how close the plugin is to dropping out.
 
@@ -59,6 +59,12 @@ This is the most common way to waste a session:
 | `parameter-readback` | The value provider returns the applied value, not the one just set, while the set is still pending. For an out-of-process AUv3, the host's copy can also lag straight after render-thread automation while the plugin has the value: compare its `fullState` before changing code. |
 | `state` | `fullState`'s getter misses sets still waiting to be applied; the setter applies the patch but doesn't tell the parameter tree (an out-of-process host keeps its own copy of every value); or older pending sets land on top of the restored state. |
 | `clicks` | A gain or mix level is applied in one sample. Glide to the new value over 5-30 ms (a one-pole smoother or a ramp). A delay's time needs a crossfade instead. |
+| `sample-rates` pitch depends on the rate | A rate is assumed instead of read from the bus format in `allocateRenderResources`: an oscillator's phase increment, filter coefficients, a delay length in samples. |
+| `sample-rates` off at every rate | A rate assumed inside the plugin's own graph: nodes made before the rate is set, or a library's default (AudioKit's is 48 kHz on iOS 18+, 44.1 kHz on the Mac). (44.1/48)² is -293 cents; 44.1/48 alone is -147. |
+| `two-instances` | Static or global state: a shared engine, voice, parameter tree or DSP buffer. Everything should hang off the AUAudioUnit instance. |
+| `latency-tail` | `latency` and `tailTime` not overridden, or not updated when a parameter (lookahead, reverb size, delay time) changes them. |
+| `bypass` | `shouldBypassEffect` ignored. While it's true, copy input to output (delayed by the reported latency if you keep it constant), crossfading on change. |
+| `factory-presets` | A preset with a value the DSP doesn't expect, or one that does file or graph work when set (hosts set presets on the main thread). |
 | `plays` render errors | `kAudioUnitErr_NoConnection` for an effect usually means the input bus isn't enabled or connected; `TooManyFramesToProcess` means `maximumFramesToRender` isn't respected. |
 
 ## Listening

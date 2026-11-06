@@ -1,0 +1,59 @@
+# Test your Audio Unit on every push, with GitHub Actions on a macOS runner.
+# Copy this to .github/workflows/auv3-test.yml in your plugin's repository and change
+# the three marked lines. A failed check fails the job; the report is kept as an
+# artifact, as JSON for tools and text for people.
+#
+# It tests the Mac build of your plugin (a Mac app, or Mac Catalyst / "Designed for
+# iPad"). Hosted runners have no audio device and no screen session for the plugin's
+# window, so it runs with --no-ui, and --fast: timing checks mean less there, so
+# treat late-render warnings from CI as a prompt to run auv3-test on your own Mac.
+
+name: auv3-test
+
+on: [push, pull_request]
+
+jobs:
+  test-plugin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the plugin's app
+        run: |
+          # CHANGE: your project, scheme and destination.
+          xcodebuild -project MyPlugin.xcodeproj -scheme MyPlugin \
+            -destination 'platform=macOS' -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build -quiet
+
+      - name: Register its Audio Unit
+        run: |
+          # macOS registers an AUv3 when its app is first opened.
+          APP=$(find build/Build/Products -maxdepth 2 -name '*.app' | head -1)
+          open "$APP"; sleep 5; killall "$(basename "$APP" .app)" || true
+          killall -9 AudioComponentRegistrar || true; sleep 3
+
+      - name: Get auv3-test
+        run: |
+          git clone --depth 1 https://github.com/sufystudios/auv3-test.git /tmp/auv3-test
+          swift build -c release --package-path /tmp/auv3-test --scratch-path /tmp/auv3-test-build
+
+      - name: Test it
+        run: |
+          # CHANGE: your plugin's type, subtype and manufacturer codes.
+          CODES="aumu Mplg Mine"
+          /tmp/auv3-test-build/release/auv3-test $CODES --list | grep -q "${CODES}" \
+            || { echo "The plugin isn't registered:"; /tmp/auv3-test-build/release/auv3-test --list; exit 2; }
+          /tmp/auv3-test-build/release/auv3-test $CODES --no-ui --fast --json > auv3-test.json; code=$?
+          /tmp/auv3-test-build/release/auv3-test $CODES --no-ui --fast > auv3-test.txt || true
+          cat auv3-test.txt
+          exit $code
+
+      # CHANGE (optional): a scenario of your own, as a regression test.
+      # - name: Scenario
+      #   run: /tmp/auv3-test-build/release/auv3-test aumu Mplg Mine --no-ui --scenario tests/filter-sweep.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auv3-test-report
+          path: auv3-test.*

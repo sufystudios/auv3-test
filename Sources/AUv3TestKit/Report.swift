@@ -93,4 +93,4 @@ public struct Report: Codable {
     func printJSON() { Swift.print(json) }
 }
 
-let auv3TestVersion = "0.4.0"
+let auv3TestVersion = "0.5.0"
