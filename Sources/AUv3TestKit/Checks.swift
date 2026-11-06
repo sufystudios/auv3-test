@@ -37,6 +37,7 @@ final class TestRun: @unchecked Sendable {
         checkClicks()
         checkParameterReadBack()
         checkStateRestore()
+        checkFactoryPresets()
         checkBypass()
         checkLatencyAndTail()
         checkTwoInstances()

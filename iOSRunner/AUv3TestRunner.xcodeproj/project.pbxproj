@@ -20,10 +20,12 @@
 		C250392A928CA304944C65B5 /* Options.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0986E496EDDBEF3435037D /* Options.swift */; };
 		CEC84C9DB5210E1A6CC7C56D /* Report.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0168AEF90F17F7B0724790 /* Report.swift */; };
 		D1E253C491B0844AA4FA6CAB /* HostChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984F0A7FB28C6B0EA25688A6 /* HostChecks.swift */; };
+		FFF409D76934533A188CAAE7 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B482C495AFA77D211A19710 /* KeyboardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		381C70C7A09C4D140FEBBCA3 /* SoundAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundAnalysis.swift; sourceTree = "<group>"; };
+		5B482C495AFA77D211A19710 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
 		64FFBACBFDEBD8BDD8799D17 /* Checks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Checks.swift; sourceTree = "<group>"; };
 		6A1BF68FE3FE321ECCE6BAFE /* PluginHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginHost.swift; sourceTree = "<group>"; };
 		6D0986E496EDDBEF3435037D /* Options.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Options.swift; sourceTree = "<group>"; };
@@ -64,6 +66,7 @@
 				64FFBACBFDEBD8BDD8799D17 /* Checks.swift */,
 				ACF50A21566D936BC46E2C5D /* ClickDetection.swift */,
 				984F0A7FB28C6B0EA25688A6 /* HostChecks.swift */,
+				5B482C495AFA77D211A19710 /* KeyboardView.swift */,
 				91ABE17A1A31D30D380CC4D2 /* LiveSession.swift */,
 				6D0986E496EDDBEF3435037D /* Options.swift */,
 				6A1BF68FE3FE321ECCE6BAFE /* PluginHost.swift */,
@@ -157,6 +160,7 @@
 				87A2BC36F68F0F2F3A33FFD3 /* Checks.swift in Sources */,
 				76A32CFCE5E82A4E8954DE87 /* ClickDetection.swift in Sources */,
 				D1E253C491B0844AA4FA6CAB /* HostChecks.swift in Sources */,
+				FFF409D76934533A188CAAE7 /* KeyboardView.swift in Sources */,
 				384F8A16E35A3EFA5D327DFF /* LiveSession.swift in Sources */,
 				C250392A928CA304944C65B5 /* Options.swift in Sources */,
 				4F7134C2A3F53B841D1BDB5C /* PluginHost.swift in Sources */,

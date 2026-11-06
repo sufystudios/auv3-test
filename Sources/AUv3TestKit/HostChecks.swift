@@ -236,6 +236,57 @@ extension TestRun {
             measurements: m))
     }
 
+    // MARK: Factory presets
+
+    /// Each preset the plugin offers hosts loads, sounds, and reads back - the kind of
+    /// bug only the user who picks that one preset ever finds.
+    func checkFactoryPresets() {
+        let unit = host.audioUnit
+        let presets = unit.factoryPresets ?? []
+        guard !presets.isEmpty else { return }
+        log("Loading \(presets.count) factory presets")
+        let saved = unit.fullState
+        let host = self.host
+        var silent: [String] = [], broken: [String] = [], slow: [String] = [], notCurrent: [String] = []
+        var slowest: Double = 0
+        for preset in presets.prefix(64) {
+            let started = Date()
+            unit.currentPreset = preset
+            let took = Date().timeIntervalSince(started)
+            slowest = max(slowest, took)
+            if took > 0.5 { slow.append("\(preset.name) (\(String(format: "%.1f", took)) s)") }
+            if unit.currentPreset?.number != preset.number { notCurrent.append(preset.name) }
+            let (samples, stats) = capture(seconds: 0.6) { index in
+                if index == 0, host.isInstrument { for note in [48, 55, 60] as [UInt8] { host.noteOn(note) } }
+            }
+            if host.isInstrument { _ = render(seconds: 0.3) { index in if index == 0 { for note in [48, 55, 60] as [UInt8] { host.noteOff(note) } } } }
+            if stats.renderErrors > 0 || stats.nonFiniteBlocks > 0 || stats.stalls > 0 {
+                broken.append("\(preset.name) (\(stats.renderErrors > 0 ? "render errors" : stats.nonFiniteBlocks > 0 ? "NaN samples" : "a dropout"))")
+            } else if SoundAnalysis.peak(samples.suffix(samples.count / 2)[...]) < 1e-4 {
+                silent.append(preset.name)
+            }
+        }
+        if let saved { unit.fullState = saved }
+        _ = render(seconds: 0.2)
+
+        var problems: [(failed: Bool, text: String)] = []
+        if !broken.isEmpty { problems.append((true, "These presets broke rendering: \(broken.prefix(8).joined(separator: ", "))\(broken.count > 8 ? "…" : "").")) }
+        if !silent.isEmpty {
+            problems.append((false, "Silent with \(host.isInstrument ? "a chord held" : "the test tone"): \(silent.prefix(8).joined(separator: ", "))\(silent.count > 8 ? "…" : "")."))
+        }
+        if !slow.isEmpty { problems.append((false, "Slow to load (hosts set presets on the main thread, so the UI waits): \(slow.prefix(5).joined(separator: ", ")).")) }
+        if !notCurrent.isEmpty { problems.append((false, "currentPreset didn't read back as the preset just set for \(notCurrent.prefix(5).joined(separator: ", ")); hosts show the wrong name.")) }
+        checks.append(CheckResult(
+            id: "factory-presets", title: "Every factory preset loads and plays",
+            status: problems.contains { $0.failed } ? .failed : problems.isEmpty ? .passed : .warning,
+            detail: problems.isEmpty
+                ? "All \(min(presets.count, 64)) factory presets loaded (the slowest in \(Int(slowest * 1000)) ms), played, and read back."
+                : problems.map(\.text).joined(separator: " "),
+            hint: problems.isEmpty ? nil : "Load each one in a host and listen. A preset that sets a value out of range, or one DSP state the code doesn't expect, is the usual cause; slow loads do file or graph work on the main thread.",
+            measurements: ["presets": Double(presets.count), "slowestLoadMs": (slowest * 10_000).rounded() / 10,
+                           "silent": Double(silent.count), "broken": Double(broken.count)]))
+    }
+
     // MARK: Sample rates
 
     static let testRates: [Double] = [44_100, 48_000, 96_000]

@@ -41,8 +41,15 @@ final class PluginHost: @unchecked Sendable {
     /// An app-extension AUv3, loaded in its own process; otherwise an AUv2 in ours.
     let isAUv3: Bool
 
+    /// In --play, the host's own keyboard under the plugin; its keys go to `onKeyboardNote`.
+    private(set) var keyboard: KeyboardView?
+    var onKeyboardNote: ((_ note: UInt8, _ down: Bool) -> Void)?
+    static let keyboardHeight: CGFloat = 130
+
     #if os(macOS)
     private(set) var window: NSWindow?
+    /// The plugin's view controller, kept while it's shown inside a container.
+    private var hostedController: NSViewController?
     #else
     /// The plugin's view controller, kept while the tests run, as a host showing it would.
     private var viewController: UIViewController?
@@ -184,8 +191,23 @@ final class PluginHost: @unchecked Sendable {
                     // Swift owns the window; AppKit's old default would release it again on close.
                     window.isReleasedWhenClosed = false
                     window.title = "\(self.component.name) - auv3-test"
-                    window.contentViewController = controller
-                    window.setContentSize(size)
+                    if self.options.live {
+                        // The plugin above, the host's keyboard below.
+                        let keys = Self.keyboardHeight
+                        let container = NSView(frame: NSRect(x: 0, y: 0, width: size.width, height: size.height + keys))
+                        controller.view.frame = NSRect(x: 0, y: keys, width: size.width, height: size.height)
+                        controller.view.autoresizingMask = [.width, .height]
+                        container.addSubview(controller.view)
+                        let keyboard = self.makeKeyboard(frame: NSRect(x: 0, y: 0, width: size.width, height: keys))
+                        keyboard.autoresizingMask = [.width, .maxYMargin]
+                        container.addSubview(keyboard)
+                        self.hostedController = controller
+                        window.contentView = container
+                        window.setContentSize(container.frame.size)
+                    } else {
+                        window.contentViewController = controller
+                        window.setContentSize(size)
+                    }
                     window.center()
                     window.orderFrontRegardless()
                     self.window = window
@@ -242,8 +264,10 @@ final class PluginHost: @unchecked Sendable {
 
     func closeWindow() {
         DispatchQueue.main.sync {
+            self.keyboard?.releaseAll()
             self.window?.close()
             self.window = nil
+            self.hostedController = nil
         }
     }
     #else
@@ -272,9 +296,17 @@ final class PluginHost: @unchecked Sendable {
                     container.view.backgroundColor = .black
                     container.modalPresentationStyle = .fullScreen
                     container.addChild(controller)
-                    controller.view.frame = container.view.bounds
+                    let bounds = container.view.bounds
+                    let keys = self.options.live ? Self.keyboardHeight : 0
+                    controller.view.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height - keys)
                     controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
                     container.view.addSubview(controller.view)
+                    if self.options.live {
+                        // The host's keyboard below the plugin, clear of the home indicator.
+                        let keyboard = self.makeKeyboard(frame: CGRect(x: 0, y: bounds.height - keys, width: bounds.width, height: keys - 20))
+                        keyboard.autoresizingMask = [.flexibleWidth, .flexibleTopMargin]
+                        container.view.addSubview(keyboard)
+                    }
                     controller.didMove(toParent: container)
                     root.present(container, animated: false)
                 }
@@ -301,11 +333,24 @@ final class PluginHost: @unchecked Sendable {
 
     func closeWindow() {
         DispatchQueue.main.sync {
+            self.keyboard?.releaseAll()
             self.viewController?.parent?.dismiss(animated: false)
             self.viewController = nil
         }
     }
     #endif
+
+    /// The host's keyboard, playing the plugin by MIDI (main thread, as a host's UI does).
+    private func makeKeyboard(frame: CGRect) -> KeyboardView {
+        let keyboard = KeyboardView(frame: frame)
+        keyboard.onNote = { [weak self] note, down in
+            guard let self else { return }
+            self.sendMIDI(down ? [0x90, note, 100] : [0x80, note, 0])
+            self.onKeyboardNote?(note, down)
+        }
+        self.keyboard = keyboard
+        return keyboard
+    }
 
     // MARK: Rendering
 

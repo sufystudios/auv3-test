@@ -164,7 +164,7 @@ auv3-test aumu Dron Sufy --play --spectrogram session.png --save-audio session/
 ./auv3-test-ios "My iPad" aumu Dron Sufy --play --seconds 90
 ```
 
-`--play` opens the plugin and plays it through the speakers, for you to play: its own keys and controls, or any MIDI keyboard connected (every MIDI source is listened to). Stop by pressing Return in the terminal or closing the plugin's window, or let `--seconds` run out (default 120, at most 600). On iOS, the plugin's view fills the device's screen; play it there until the time is up.
+`--play` opens the plugin and plays it through the speakers, for you to play: the host's own keyboard under it (two octaves, C3 to C5; multi-touch on iOS, the mouse on the Mac), the plugin's own keys and controls, or any MIDI keyboard connected (every MIDI source is listened to). Stop by pressing Return in the terminal or closing the plugin's window, or let `--seconds` run out (default 120, at most 600). On iOS, the plugin's view fills the device's screen; play it there until the time is up.
 
 Then you get a timeline, with what you were doing at each moment:
 

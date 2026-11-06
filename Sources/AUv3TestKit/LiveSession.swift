@@ -107,7 +107,12 @@ final class LiveSession: @unchecked Sendable {
                 self.lock.withLock { self.notes.append(Event(time: self.now, text: Scenario.noteName(Int(bytes[1])))) }
             }
         }
-        settings["midiInputs"] = midi.sourceNames.isEmpty ? "none connected (play the plugin's own keys)" : midi.sourceNames.joined(separator: ", ")
+        settings["midiInputs"] = midi.sourceNames.isEmpty ? "none connected (the on-screen keyboard plays it)" : midi.sourceNames.joined(separator: ", ")
+        // The host's on-screen keyboard (see KeyboardView) sends its notes itself.
+        host.onKeyboardNote = { [weak self] note, down in
+            guard let self, down else { return }
+            self.lock.withLock { self.notes.append(Event(time: self.now, text: Scenario.noteName(Int(note)))) }
+        }
 
         do {
             try engine.start()
@@ -119,7 +124,7 @@ final class LiveSession: @unchecked Sendable {
                                  hint: "Check the Mac's or device's sound output is available.")], settings)
         }
 
-        print("▶︎ Playing \(host.component.name) live, for up to \(Int(options.seconds)) s. Play its keys or a MIDI keyboard, and move its controls.")
+        print("▶︎ Playing \(host.component.name) live, for up to \(Int(options.seconds)) s. Play the keyboard under it (or its own, or a MIDI keyboard), and move its controls.")
         #if os(macOS)
         print("  Press Return here, or close its window, when you're done.")
         if isatty(0) != 0 {
